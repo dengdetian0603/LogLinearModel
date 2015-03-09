@@ -1,0 +1,94 @@
+\documentclass[11 pt, a4paper]{article}  % list options between brackets
+\usepackage[nottoc,notlof,notlot,numbib]{tocbibind}
+\usepackage[margin=1.2 in]{geometry}
+\usepackage{fancyhdr}
+\usepackage{manfnt}
+\usepackage{pgf}
+\usepackage{amsmath,amssymb,natbib,graphicx}
+\usepackage{amsfonts}
+\DeclareMathAlphabet{\mathpzc}{OT1}{pzc}{m}{it}
+\usepackage{bbm}
+\usepackage{hyperref}
+\usepackage{float}
+\usepackage{mathrsfs} %mathscr{A}
+\usepackage{subfigure}
+\usepackage{chngpage}
+
+\newtheorem{axiom}{Axiom}[section]
+\newtheorem{result}{Result}[section]
+\newtheorem{example}{example}[section]
+\newtheorem{definition}{Definition}[section]
+\newtheorem{principle}{Principle}[section]
+\newtheorem{theorem}{Theorem}[section]% list packages between braces
+
+% type user-defined commands here
+
+\begin{document}
+
+\title{Summary of Short-term Research Objectives}   % type title between braces
+\author{Detian Deng}         % type author(s) between braces
+\date{\today}    % type date between braces
+\maketitle
+
+%\begin{abstract}
+%\end{abstract}
+
+\section{Model Specification}             % section 1
+Let $L$ be a K-dimensional Bernoulli random variable denoting the true state.
+Consider the Quadratic Exponential Family, or pairwise log linear model:
+\begin{align*}
+f(l; \Theta) = & \exp \{\Theta_a^T l + \Theta_b^{T} u - A(\Theta)\}
+\end{align*}
+where $U = (L_{1}L_{2}, \ldots, L_{K-1}L_{K})$ is a $K(K-1)/2 \times 1$ vector of two-way cross-products and $\Theta = (\Theta_a, \Theta_b)$ contains the the natural parameters, which is a $K(K+1)/2 \times 1$ vector.\\
+\ \\
+For the prior, let $S = \sum_{j=1}^K L_j = s$ has some fixed pmf $\pi(s)$ , $s = 0,1,\ldots, K$, and let each possible outcome of $L$ given $S = s$ occur with probability $\frac{\pi(s)}{{K \choose s}}.$\\
+
+\section{Research Objectives}
+\begin{enumerate}
+\item Given the above model specification, what is the implied prior for $\Theta$?
+\item Using the implied prior calculated above, simulate measurement data $Y$ from the following hierarchical model:
+\begin{align*}
+\Theta \sim & [\Theta | \pi, K]\\
+L \sim & [L | \Theta]\\
+Y \sim & [Y | L]
+\end{align*}
+where $[Y | L]$ is defined by $Pr(Y_j=1|L_j=1) = \psi_j$ and $Pr(Y_j=0|L_j=0) = \phi_j$ with $Y_j$ being conditional independent with each other given $L$.
+\item Based on the data simulated above, estimate the individual etiology $P(L_i |Y)$ and the population etiology $P(\Theta |Y)$.
+\end{enumerate}
+
+\newpage
+\section{Results}
+\subsection{From $\pi$ to $\Theta$}
+Let $A =\sum\exp\{\Theta_a^T l + \Theta_b^{T} u\}$. Since we assume each type of event given $s$ has the same probability, all elements in $\Theta_a$ are equal to $\beta$, and all elements in $\Theta_b$ are equal to $\gamma$. When $s = 0, 1$, we have 
+\begin{align*}
+\frac{1}{A} = & \pi_0\\
+\frac{\exp\{\beta\}}{A} = & \frac{\pi_1}{K}
+\end{align*}
+Then $\beta = \log \frac{\pi_1}{\pi_0 K}$.\\
+
+For $s\geq 2$, we have
+\begin{align*}
+\exp\{s\beta + {s \choose 2}\gamma\}/A = & \pi_s/{K \choose s}\\
+\pi_s = & \pi_0 {K \choose s} \exp\{s\beta + {s \choose 2}\gamma\}
+\end{align*}
+Since all $\pi_s$ should sum up to 1, we can solve the following equation for $\gamma$
+\[1 = \pi_0 +\pi_1 + \sum_{s=2}^K \left[ \pi_0 {K \choose s} \exp\{s\beta + {s \choose 2}\gamma\}\right]\]
+Hence $\beta,\gamma$, and $(\pi_2,\ldots,\pi_K)$ are determined given $\pi_0$, $\pi_1$ and $K$. 
+
+%\begin{table}[htbp]
+%\begin{adjustwidth}{-0.5in}{-1in}
+%\resizebox{0.7\textwidth}{!}{\begin{minipage}{\textwidth}
+%\caption{Summary of the model coefficients and standard error estimates}
+%\label{tab: coef}
+%
+%\begin{tabular}{llllll|lllll} 
+%\hline 
+% \\
+%\hline \\
+%\end{tabular}
+%\end{minipage}}
+%\end{adjustwidth}
+%\end{table}
+
+
+\end{document}

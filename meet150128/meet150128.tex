@@ -1,0 +1,177 @@
+\documentclass[]{beamer}
+% Class options include: notes, notesonly, handout, trans,
+%                        hidesubsections, shadesubsections,
+%                        inrow, blue, red, grey, brown
+
+% Theme for beamer presentation.
+\usepackage{beamerthemesplit} 
+\usefonttheme{professionalfonts}
+
+\newcommand\Fontvi{\fontsize{7}{7}\selectfont}
+\newcommand\Fontvii{\fontsize{8}{8}\selectfont}
+\newcommand{\argmax}[1]{\underset{#1}{\operatorname{arg}\,\operatorname{max}}\;}
+% Other themes include: beamerthemebars, beamerthemelined, 
+%                       beamerthemetree, beamerthemetreebars  
+
+
+
+\title{Log Linear Models and Multivariate Binary Data }    % Enter your title between curly braces
+\author{Detian Deng}                 % Enter your name between curly braces
+\institute{Department of Biostatistics \\Johns Hopkins Bloomberg School of Public Health}      % Enter your institute name between curly braces
+\date{\today}                    % Enter the date or \today between curly braces
+
+\begin{document}
+
+% Creates title page of slide show using above information
+\begin{frame}
+  \titlepage
+\end{frame}
+%\note{Talk for 30 minutes} % Add notes to yourself that will be displayed when
+                           % typeset with the notes or notesonly class options
+
+\begin{frame}
+\frametitle{Reference}
+\Fontvi
+\begin{itemize}
+\item Cox, D. R. (1972). The analysis of multivariate binary data. Applied statistics, 113-120.
+\item Zhao, L. P., \& Prentice, R. L. (1990). Correlated binary regression using a quadratic exponential model. Biometrika, 77(3), 642-648.
+\item Fitzmaurice, G. M., \& Laird, N. M. (1993). A likelihood-based method for analysing longitudinal binary responses. Biometrika, 80(1), 141-151.
+\item Fitzmaurice, G. M., Laird, N. M., \& Rotnitzky, A. G. (1993). Regression models for discrete longitudinal responses. Statistical Science, 284-299.
+\item Molenberghs, G., \& Ritter, L. L. (1996). Methods for analyzing multivariate binary data, with association between outcomes of interest. Biometrics, 1121-1133.
+\item Dai, B., Ding, S., \& Wahba, G. (2013). Multivariate Bernoulli distribution. Bernoulli, 19(4), 1465-1483.
+\end{itemize}
+
+\end{frame}
+
+\section[Outline]{}
+
+% Creates table of contents slide incorporating
+% all \section and \subsection commands
+\begin{frame}
+  \tableofcontents
+\end{frame}
+%
+%\begin{frame}
+%  \frametitle{Notations}   % Insert frame title between curly braces
+%
+%  \begin{itemize}
+%\item $X_1, X_2, \ldots, X_N$ are $N$ independent observations on $X$
+%  \end{itemize}
+%\end{frame}
+
+
+\section{Log Linear Representation}
+
+\subsection{Cox (1972)}
+\begin{frame}
+  \frametitle{Cox (1972)}   % Insert frame title between curly braces
+Suppose $Y$ is a K-dimensional multivariate Bernoulli random variable.
+\begin{align}
+f(y_i, \Psi_i, \Omega_i) = & \exp \{\Psi_i^T y_i + \Omega_i^T w_i - A(\Psi_i,\Omega_i)\}
+\end{align}
+where $W_i$ is a $(2^K - K - 1) \times 1$ vector of two- and  higher- way cross-products of $Y_i$, $\Psi_i, \Omega_i$ are vectors of canonical parameters (conditional log odds ratios), and $A(\Psi_i,\Omega_i)$ is a normalizing constant, $\exp \{A(\Psi_i,\Omega_i)\} = \sum \exp (\Psi_i^T y_i + \Omega_i^T w_i)$, summing over all $2^K$ possible values of $Y_i$.
+\end{frame}
+
+\subsection{Zhao and Prentice (1990)}
+\begin{frame}
+  \frametitle{Zhao and Prentice (1990)}   % Insert frame title between curly braces
+
+Quadratic Exponential Family, or pairwise model:
+\begin{align}
+f(y_i, \Psi_i, \Omega_i) = & \exp \{\Psi_i^T y_i + \Omega_i^{T} u_i - A(\Psi_i,\Omega_i)\}
+\end{align}
+where the three- and higher- way association parameters are set to zero, i.e.
+$U_i = (Y_{i1}Y_{i2}, \ldots, Y_{iK-1}Y_{iK})$ is a $K(K-1)/2 \times 1$ vector of two-way cross-products.\\
+\ \\
+A one-to-one transformation from $(\Psi_i, \Omega_i)$ to the moment parameters $(\mu_i,\sigma_i)$ was made in order to obtain the likelihood equations, where $\sigma_i$ is the vector of marginal correlations.
+\end{frame}
+
+
+\subsection{Fitzmaurice and Laird (1993)}
+
+\begin{frame}
+\frametitle{Fitzmaurice and Laird (1993)}
+``Mixed parameter" model based on the general log-linear representation $(1)$.\\
+\ \\
+A model for the mean, $\mu_i$, and the canonical association parameters, $\Omega_i$, is assumed and likelihood equations are obtained via the 1-1 transformation from 
+$(\Psi_i, \Omega_i)$ to $(\mu_i, \Omega_i)$, although there is , in general, no closed form expression representing the joint probabilities as a function of $\mu_i$ and $\Omega_i$.
+\end{frame}
+
+%\subsection{Molenberghs and Ritter (1996)}
+%
+%\begin{frame}
+%\frametitle{Molenberghs and Ritter (1996)}
+%Re-partition the general log-linear model: 
+%\begin{align}
+%f(y_i, \Psi_i, \Omega_i) = & \exp \{\Psi_i^T v_i + \Omega_i^T w_i - A(\Psi_i,\Omega_i)\}
+%\end{align}
+%where $V_i$ contains the outcomes and pairwise cross-products, $W_i$ contains the three- and higher- way cross-products
+%
+%\end{frame}
+
+
+
+
+
+\section{Conditional Multivariate Bernoulli Distribution}
+\subsection{Pairwise Model Parameterization}
+
+\begin{frame}
+\frametitle{Pairwise Model Parameterization}
+\Fontvii
+\begin{align*}
+P(Y_i=y|\sum_{j=1}^K Y_{ij} = s) = & \frac{P(Y_i=y,\sum_{j=1}^K Y_{ij} = s)}{P(\sum_{j=1}^K Y_{ij} = s)}\\
+= & \frac{1(\sum_{j=1}^K y_j = s) P(Y_i=y)}{P(\sum_{j=1}^K Y_{ij} = s)} \\
+= & \frac{1(\sum_{j=1}^K y_j = s)\exp \{\Psi_i^T y + \Omega_i^{T} u - A(\Psi_i,\Omega_i) \}}{\sum \exp \{\Psi_i^T y + \Omega_i^{T} u - A(\Psi_i,\Omega_i)\}}\\
+= & 1(\sum_{j=1}^K y_j = s)\exp \{\Psi_i^T y + \Omega_i^{T} u - B(\Psi_i,\Omega_i,s) \}
+\end{align*}
+where $B(\Psi_i,\Omega_i, s)$ is a normalizing constant, $\exp \{B(\Psi_i,\Omega_i,s)\} = \sum \exp (\Psi_i^T y + \Omega_i^T u)$, summing over all ${K \choose s}$ possible values of $Y$.
+
+\end{frame}
+
+\subsection{Parameter Estimation}
+\begin{frame}
+\frametitle{Estimation}
+
+\end{frame}
+
+
+\end{document}
+
+
+%\subsection{Theorem 3}
+%\subsection{Decomposition of Fisher' s Information}
+
+%\begin{frame}
+  %\frametitle{Decomposition of Fisher' s Information}   % Insert frame title between curly braces
+
+ % \begin{itemize}
+  %\item<1-> Point 1 (Click ``Next Page'' to see Point 2) % Use Next Page to go to Point 2
+  %\item<2-> Point 2  % Use Next Page to go to Point 3
+  %\item<3-> Point 3
+  %\end{itemize}
+%\end{frame}
+%\note{Speak clearly}  % Add notes to yourself that will be displayed when
+                      % typeset with the notes or notesonly class options
+
+
+%\section{Decomposition of Fisher' s Information}
+
+%\begin{frame}
+  %\frametitle{Decomposition of Fisher' s Information}   % Insert frame title between curly braces
+  %\begin{columns}[c]
+  %\column{2in}  % slides are 3in high by 5in wide
+  %\begin{itemize}
+  %\item<1-> First item
+  %\item<2-> Second item
+  %\item<3-> ...
+  %\end{itemize}
+ % \column{2in}
+  %\framebox{Insert graphic here % e.g. \includegraphics[height=2.65in]{graphic}
+  %}
+  %\end{columns}
+%\end{frame}
+%\note{The end}       % Add notes to yourself that will be displayed when
+		     % typeset with the notes or notesonly class options
+
+
