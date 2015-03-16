@@ -6,7 +6,7 @@
 
 ## Possible addtional topics
 
-### Given the measurements being from QE family, characterize the sparse (cell counts with zeros) latent class model.
+* Given the measurements being from QE family, characterize the sparse (cell counts with zeros) latent class model.
 
 * Proposal draft.
 
