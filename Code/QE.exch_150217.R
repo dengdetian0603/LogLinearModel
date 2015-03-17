@@ -1,4 +1,5 @@
-
+#  Quadratic Exponential Family (QE)
+## Exchangeable parameterization
 obj = function(K,pi0,pi1,gamma)
 {
       value = 0

@@ -4,6 +4,9 @@ library(gtools)
 library(doMC)
 library(foreach)
 
+
+#  General Log-linear model (LL)
+## Exchangeable parameterization
 ##--------------------------------------------------------------------------##
 PiToTheta = function(Pis)
 {
