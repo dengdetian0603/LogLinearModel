@@ -37,23 +37,27 @@
 Let $L$ be a K-dimensional Bernoulli random variable denoting the true state.
 Consider the general log linear model:
 \begin{align*}
-f(l; \Theta) = & \exp \{\Theta_1^T l + \Theta_2^{T} u_2 + \ldots + \Theta_K^T u_K - A(\Theta)\}
+f(l; \Theta) = & \exp \{\Theta_1^T l + \Theta_2^{T} u_2 + \ldots + \Theta_K^T u_K - A^*(\Theta)\}
 \end{align*}
 where $U_k$ is a ${K \choose k} \times 1$ vector of k-way cross-products, $k = 1,\ldots,K$,  and $\Theta = (\Theta_1,\ldots, \Theta_K)$ contains the the natural parameters, which is a $(2^K-1) \times 1$ vector.\\
 \ \\
 Model restrictions, let $\tilde{l} = (l,u_2,\dots,u_K)^T$, and $S = \sum_{j=1}^K L_j = s$ has some fixed pmf 
 \begin{align}
-\pi(s) = & \frac{1}{A} \sum_{\tilde{l}:S=s}\exp \{ \Theta^T \tilde{l}\}  \text{ , } s = 0,1,\ldots, K \\
-A = & \sum_{\tilde{l}:l\in \{0,1\}^K}\exp \{ \Theta^T \tilde{l}\}
+\pi(s) = & \frac{1}{A(\Theta)} \sum_{\tilde{l}:S=s}\exp \{ \Theta^T \tilde{l}\}  \text{ , } s = 0,1,\ldots, K \\
+A(\Theta) = & \sum_{\tilde{l}:l\in \{0,1\}^K}\exp \{ \Theta^T \tilde{l}\}
 \end{align}
 
 \newpage
 
 \section{Research Objectives}
-Consider using the QE model, observed data are $\tilde{l}_i,i=1,\ldots,n$ and $\tilde{s}_i,i=n+1,\ldots,n+m$, what is the MLE of $\theta$?
+Consider using the QE model, observed data are $\tilde{l}_i,i=1,\ldots,n$ and $\tilde{S}_i,i=n+1,\ldots,n+m$, what is the MLE of $\theta$?
 \begin{align*}
-P(\theta;\tilde{L}_n,\tilde{S}_m) = & \frac{1}{A^n} \prod_{i=1}^n \exp[\theta^T\tilde{l}_i] \frac{1}{A^m} \prod_{i=n+1}^{n+m} \left \{ \sum_{j:\tilde{l}_j^T1=s_i} \exp [\theta^T\tilde{l}_j]\right \}\\
-\log P(\theta) = & \sum_{i=1}^n \theta^T\tilde{l}_i + \sum_{i=n+1}^{n+m} \log \left \{ \sum_{j:\tilde{l}_j^T1=s_i} \exp [\theta^T\tilde{l}_j]\right \} - (n+m) \log A
+P(\theta;\tilde{L}_n,\tilde{S}_m) = & \frac{1}{A^n(\theta)} \prod_{i=1}^n \exp[\theta^T\tilde{l}_i] \frac{1}{A^m(\theta)} \prod_{i=n+1}^{n+m} \left \{ \sum_{j:\tilde{l}_j^T1=S_i} \exp [\theta^T\tilde{l}_j]\right \}\\
+\log P(\theta) = & \sum_{i=1}^n \theta^T\tilde{l}_i + \sum_{i=n+1}^{n+m} \log \left \{ \sum_{j:\tilde{l}_j^T1=S_i} \exp [\theta^T\tilde{l}_j]\right \} - (n+m) \log A(\theta)\\
+= & \sum_{i=1}^n \theta^T\tilde{l}_i + \sum_{s=0}^K m_s \log A_s(\theta) - (n+m) \log A(\theta)\\
+\text{where }
+m_s = & \sum_{i=n+1}^{n+m}1(S_i=s)\\
+A_s(\theta) = & \sum_{j:\tilde{l}_j^T1=s}\exp \{ \theta^T \tilde{l_j}\}
 \end{align*}
 
 %\begin{table}[htbp]

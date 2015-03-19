@@ -23,8 +23,8 @@ probs = function(K,pi0,pi1,gamma)
       Pi
 }
 
-ga = uniroot(f=obj,interval=c(-200,200),K=10,pi0=0.7,pi1=0.2)
-Pi = probs(K=10,pi0=0.7,pi1=0.2,gamma=ga$root)
+ga = uniroot(f=obj,interval=c(-200,200),K=10,pi0=0.3,pi1=0.4)
+Pi = probs(K=10,pi0=0.3,pi1=0.4,gamma=ga$root)
 barplot(Pi)
 
-points(0:10,log(Pi))
+plot(0:10,log(Pi))

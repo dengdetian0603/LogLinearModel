@@ -31,43 +31,25 @@ PiToTheta = function(Pis)
       theta
 }
 
-PiToTheta(c(0.3,0.4,0.2,0.1))
-rdirichlet(1,c(3,4,2,0.5,0.5)) %>% PiToTheta(.)
+#PiToTheta(c(0.3,0.4,0.2,0.1))
+#rdirichlet(1,c(3,4,2,0.5,0.5)) %>% PiToTheta(.)
 
 # simulate
-registerDoMC(2)
-theta.prior = foreach(i=1:1000, .combine=rbind) %dopar% {
-      rdirichlet(1,c(3,4,2,0.5,0.5)) %>% PiToTheta(.) %>% t(.)
-}
+#registerDoMC(2)
+#theta.prior = foreach(i=1:1000, .combine=rbind) %dopar% {
+#      rdirichlet(1,c(3,4,2,0.5,0.5)) %>% PiToTheta(.) %>% t(.)
+#}
 
 # marginal distribution
-layout(matrix(1:4,nrow=2))
-for (i in 1:4)
-{hist(theta.prior[,i],breaks=25)}
-layout(matrix(1,nrow=1))
+#layout(matrix(1:4,nrow=2))
+#for (i in 1:4)
+#{hist(theta.prior[,i],breaks=25)}
+#layout(matrix(1,nrow=1))
 
 # covariance
-cor(theta.prior)
-pairs(theta.prior)
+#cor(theta.prior)
+#pairs(theta.prior)
 
-##---------------------------------------------------------------------##
-library(MVB)
-n <- 1000
-p <- 5
-kk <- 2
-tt <- NULL
-alter <- 1
-for (i in 1:kk) {
-      vec <- rep(0, p)
-      vec[i] <- alter
-      alter <- alter * (-1)
-      tt <- cbind(tt, vec)
-}
-tt <- 1.5 * tt
-tt <- cbind(tt, c(rep(0, p - 1), 1))
-x <- matrix(rnorm(n * p, 0, 4), n, p)
-res <- mvb.simu(tt, x, K = kk, rep(.5, 2))
-fitMVB <- mvbfit(x, res$response, output = 1)
 
 
 
