@@ -12,7 +12,7 @@ registerDoMC(4)
 Pis = c(0.1,0.5,0.3,0.05,0.04,0.009,0.001-1e-5,1e-5)
 K = length(Pis)-1
 
-n = 500; m = 50000
+n = 100; m = 50000
 
 # sim strategy 1
 L = mvb.exch.sim(Pis, n)
@@ -23,10 +23,10 @@ L = mvb.simu(theta0, x1, K, offset = 0)$response
 
 table(factor(apply(L,1,sum),levels=0:K))
 
-tpr = pmin(rnorm(K,0.9,0.1),1)
-fpr = pmax(rnorm(K,0.1,0.05),0)
-Y = LtoY(L,tpr,fpr) # generating Y with TPR and FPR 
-L=Y
+#tpr = pmin(rnorm(K,0.9,0.1),1)
+#fpr = pmax(rnorm(K,0.1,0.05),0)
+#Y = LtoY(L,tpr,fpr) # generating Y with TPR and FPR 
+#L=Y
 
 #-- expand the observed vectors
 L.expand = foreach(i=1:nrow(L), .combine=rbind) %dopar% {
@@ -62,4 +62,4 @@ plot(beta1,ylim=c(min(beta1,beta2,theta0[1,]),max(beta1,beta2,theta0[1,]))) # bl
 points(beta2,col="blue") # blue: L + S model
 points(as.vector(theta0),col="red") # red: true value
 
-sum((beta1-theta0[1,])^2);sum((beta2-theta0[1,])^2)
+sum((beta1-theta0[1,])^2)/K;sum((beta2-theta0[1,])^2)/K
