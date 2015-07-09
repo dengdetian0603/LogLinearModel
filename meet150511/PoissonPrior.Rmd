@@ -1,0 +1,55 @@
+---
+title: "GammaToMu0427"
+author: "Detian"
+date: "April 26, 2015"
+output: html_document
+---
+
+```{r echo=FALSE, message=FALSE}
+library(doMC)
+library(foreach)
+library(MVB)
+library(data.table)
+source("~/Documents/Johns Hopkins SPH/Research/S.Zeger/LogLinearModel/Code/LS.model.R")
+source("~/Documents/Johns Hopkins SPH/Research/S.Zeger/LogLinearModel/Code/Reparameterize_150402.R")
+registerDoMC(4) 
+set.seed(0408)
+```
+
+# QE model specification
+```{r}
+K = 9
+L.all = as.matrix(AllComb(K)) 
+theta.QE = matrix(c(rnorm(K,-0.3,1),rnorm(choose(K,2),-0.5,1.5)),nrow=1)
+
+L.all.exp.qe = foreach(i=1:nrow(L.all), .combine=rbind) %dopar% {
+      expandL.QE(L.all[i,])
+}
+```
+
+## Marginal means $\mu$ vs. conditional probability $\gamma$
+### $(\theta^{(1)},\theta^{(2)}) \mapsto \mu $
+```{r}
+Muk = ThetaToMu(Theta=theta.QE, L.All.expd=L.all.exp.qe, k=K)
+```
+### $(\mu,\theta^{(2)}) \mapsto \theta^{(1)}$
+```{r}
+Theta1.hat = MuToTheta1(Mu=unlist(Muk), Theta2=theta.QE[-(1:K)], 
+                        L.All.expd=L.all.exp.qe, k=K)
+Theta1.hat - theta.QE[1:K]
+```
+The error is within tolerance.
+
+### $(\mu, \theta^{(2)}) \mapsto (\gamma, \pi)$
+```{r}
+gamma.hat = MuTheta2ToGamma(Mu=unlist(Muk), Theta2=theta.QE[-(1:K)], 
+                        L.All.expd=L.all.exp.qe, k=K)
+data.table(gamma.hat)
+```
+
+### $(\gamma, \pi) \mapsto \mu$
+```{r}
+mu.hat = GammaToMu(gamma.hat[,2], L.all.exp.qe, K)
+mu.hat-Muk
+```
+The error is within tolerance.

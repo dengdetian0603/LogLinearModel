@@ -1,0 +1,37 @@
+---
+title: "Sample With Prior on S and Mu"
+author: "Detian Deng"
+date: "May 21, 2015"
+output: html_document
+---
+
+## Sampling data L with prior on S and $\mu$
+
+$(\mu, \pi)$ -> $(\phi|\mu,\pi)$ ->$(L| \phi, \mu,\pi)$
+
+
+### when K < 3, only one single solution to $\phi$
+
+### when K >=3, we can sample uniformly from the eligible subspace of $\phi$
+```{r , echo=FALSE, message=FALSE}
+library(limSolve)
+library(doMC)
+library(foreach)
+registerDoMC(4) 
+source("~/Documents/Johns Hopkins SPH/Research/S.Zeger/LogLinearModel/Code/ToolBox_PERCH.R")
+K=5
+L.all = as.matrix(AllComb(K))[-1,]
+S = apply(L.all,1,sum)
+index = order(S)
+L.all = L.all[index,]
+S = S[index]
+J1 = length(S)
+```
+
+```{r}
+mus = c(0.220201,0.220201,0.220201,0.220201,0.220201)
+pis = c(0.2,0.5,0.298998,0.001,0.000001,0.000001)
+
+L.sample = rDataWithPiMu.LL(K = 5 , mus, pis, 500)
+L.sample
+```

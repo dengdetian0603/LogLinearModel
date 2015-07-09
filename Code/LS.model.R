@@ -1,3 +1,10 @@
+###################################################
+# Reparameterization based on meeting on Mar 9th 
+# L be fulling observed binary vector, n observations.
+# S be the marginal sums of L that are not fully observed, m observations.
+# Combine L and S, solve MLE, to mimick the behavior of model with prior on S
+###################################################
+
 library(dplyr)
 library(magrittr)
 library(gtools)
@@ -21,11 +28,12 @@ library(MVB)
 ##----------------------------------------------------------------------##
 
 # function expands observed vector to feature space
-expandL = function(l) 
+expandL.QE = function(l) 
 {
       order2 = apply(combn(l,2),2,prod)
       c(l,order2)     
 }
+expandL = expandL.QE
 
 # function generates all possible vector of K dimension
 AllComb = function(K) 

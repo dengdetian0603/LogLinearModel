@@ -1,0 +1,113 @@
+\documentclass[11 pt, a4paper]{article}  % list options between brackets
+\usepackage[nottoc,notlof,notlot,numbib]{tocbibind}
+\usepackage[margin=1.2 in]{geometry}
+\usepackage{fancyhdr}
+\usepackage{manfnt}
+\usepackage{pgf}
+\usepackage{amsmath,amssymb,natbib,graphicx}
+\usepackage{amsfonts}
+\DeclareMathAlphabet{\mathpzc}{OT1}{pzc}{m}{it}
+\usepackage{bbm}
+\usepackage{hyperref}
+\usepackage{float}
+\usepackage{mathrsfs} %mathscr{A}
+\usepackage{subfigure}
+\usepackage{chngpage}
+
+\newtheorem{axiom}{Axiom}[section]
+\newtheorem{result}{Result}[section]
+\newtheorem{example}{example}[section]
+\newtheorem{definition}{Definition}[section]
+\newtheorem{principle}{Principle}[section]
+\newtheorem{theorem}{Theorem}[section]% list packages between braces
+
+% type user-defined commands here
+
+\begin{document}
+
+\title{Summary of Short-term Research Objectives}   % type title between braces
+\author{Detian Deng}         % type author(s) between braces
+\date{\today}    % type date between braces
+\maketitle
+
+%\begin{abstract}
+%\end{abstract}
+
+\section{Model Specification}             % section 1
+Let $L$ be a K-dimensional Bernoulli random variable denoting the true state.
+Consider the general log linear model:
+\begin{align*}
+f(l; \Theta) = & \exp \{\Theta_1^T l + \Theta_2^{T} u_2 + \ldots + \Theta_K^T u_K - A^*(\Theta)\}
+\end{align*}
+where $U_k$ is a ${K \choose k} \times 1$ vector of k-way cross-products, $k = 1,\ldots,K$,  and $\Theta = (\Theta_1,\ldots, \Theta_K)$ contains the the natural parameters, which is a $(2^K-1) \times 1$ vector.\\
+\ \\
+Model restrictions, let $\tilde{l} = (l,u_2,\dots,u_K)^T$, and $S = \sum_{j=1}^K L_j = s$ has some fixed pmf 
+\begin{align}
+\pi(s) := & P(S=s)\nonumber \\ 
+= & \frac{1}{A(\Theta)} \sum_{\tilde{l}:S=s}\exp \{ \Theta^T \tilde{l}\}  \text{ , } s = 0,1,\ldots, K \\
+A(\Theta) = & \sum_{\tilde{l}:l\in \{0,1\}^K}\exp \{ \Theta^T \tilde{l}\}
+\end{align}
+
+\newpage
+
+\section{Research Objectives}
+Suppose $\{L_i\}$ are i.i.d random variables with density $P(L_i;\Theta)$ defined above, our goal is to find a re-parameterization
+from $\Theta$ to $(\boldsymbol\pi, \boldsymbol\gamma)$ such that $P(L_i;\Theta) = P(L_i;\boldsymbol\pi, \boldsymbol\gamma)$, where 
+$\boldsymbol\pi = (\pi_0,\pi_1,\ldots,\pi_s,\ldots,\pi_K)^T, \text{ with }\sum_{s=0}^K \pi_s = 1$.
+
+\section{Results}
+\subsection{Definition of New Parameters}
+Using previous notations,  with some properly defined $\boldsymbol\gamma$, we have:
+%$J_i = \{j: L_{ij}=1\}$
+\begin{align*}
+P(L_i;\boldsymbol\pi, \boldsymbol\gamma) = & P(L_i,S_i;\boldsymbol\pi, \boldsymbol\gamma) \\
+= & P(L_i|S_i;\boldsymbol\pi, \boldsymbol\gamma) P(S_i;\boldsymbol\pi, \boldsymbol\gamma)
+\end{align*}
+where $P(L_i|S_i;\boldsymbol\pi, \boldsymbol\gamma) = P(L_i|S_i;\boldsymbol\gamma)$ because $1(S_i=s)$ is the sufficient statistic for $\pi_s$, furthermore $S_i$ is the sufficient statistic for $\boldsymbol \pi$. Also $P(S_i;\boldsymbol\pi, \boldsymbol\gamma) = \pi_{S_i}$ by definition. \\
+
+Therefore, we have
+\begin{align*}
+P(L_i;\boldsymbol\pi, \boldsymbol\gamma) = &P(L_i|S_i;\boldsymbol\gamma)\pi_{S_i}
+\end{align*}
+
+Then we define the following parameters:
+\begin{align}
+\gamma_{j_1,\ldots,j_s} = & P(L_{ij_1}=\ldots=L_{ij_s}=1|S_i=s)\\
+\boldsymbol\gamma = & (\gamma_1,\gamma_2,\ldots,\gamma_{12},\ldots,\gamma_{1\ldots K})^T , \text{ where }
+\sum_{j} \gamma_j = \sum_{j\neq j'} \gamma_{jj'} = \sum_{j\neq j'\neq j''} \gamma_{jj'j''} = \ldots = \gamma_{1\ldots K} = 1 \nonumber
+\end{align}
+Therefore $(\boldsymbol\pi, \boldsymbol\gamma)^T$ is a vector of length $2^K+K$ with degrees of freedom $2^K-1$.\\
+
+Let $J_i = \{j: L_{ij}=1\}$. We have,
+\begin{align}
+P(L_i;\boldsymbol\pi, \boldsymbol\gamma) = \gamma_{J_i} \pi_{S_i}
+\end{align}
+
+The relation between $(\boldsymbol\pi, \boldsymbol\gamma)$ and $\Theta$ is defined by equation ($2$) together with:
+\begin{align}
+\gamma_{J_i} = \frac{\exp(\Theta^T \tilde{l}_i)}{\sum_{l:l^T1=S_i}\exp(\Theta^T\tilde{l})}
+\end{align}
+with $2^K-1-K$ degrees of freedom.\\
+
+Therefore ($1$), ($3$) and ($5$) together define $2^K-1$ non-linear equations for $2^K-1$ unknowns. If there exists a unique root for the above non-linear system, then there is a one-to-one mapping between $(\boldsymbol\pi, \boldsymbol\gamma)$ and $\Theta$, which provides the re-parameterization.
+
+\subsection{Find the Re-parameterization}
+
+
+%\begin{table}[htbp]
+%\begin{adjustwidth}{-0.5in}{-1in}
+%\resizebox{0.7\textwidth}{!}{\begin{minipage}{\textwidth}
+%\caption{Summary of the model coefficients and standard error estimates}
+%\label{tab: coef}
+%
+%\begin{tabular}{llllll|lllll} 
+%\hline 
+% \\
+%\hline \\
+%\end{tabular}
+%\end{minipage}}
+%\end{adjustwidth}
+%\end{table}
+
+
+\end{document}

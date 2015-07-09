@@ -1,0 +1,69 @@
+---
+title: "Re-parameterization"
+author: "Detian"
+date: "April 8, 2015"
+output: html_document
+---
+
+# Quadratic Exponential Family Model (QE)
+## $k(k+1)/2$ parameters
+```{r, echo=FALSE}
+library(dplyr)
+library(magrittr)
+library(gtools)
+library(doMC)
+library(foreach)
+library(MVB)
+library(data.table)
+source("~/Documents/Johns Hopkins SPH/Research/S.Zeger/LogLinearModel/Code/LS.model.R")
+source("~/Documents/Johns Hopkins SPH/Research/S.Zeger/LogLinearModel/Code/Reparameterize_150402.R")
+registerDoMC(4) 
+set.seed(0408)
+K = 9
+L.all = as.matrix(AllComb(K)) 
+
+theta.QE = matrix(c(rnorm(K,-0.3,1),rnorm(choose(K,2),-0.5,1.5)),nrow=1)
+
+L.all.exp.qe = foreach(i=1:nrow(L.all), .combine=rbind) %dopar% {
+      expandL.QE(L.all[i,])
+}
+
+tmp = ThetaToGamma(Theta=theta.QE, L.All.expd = L.all.exp.qe, k=K)
+#sum(tmp[1:(K+1),2]); sum(tmp[(K+2):(2*K+1),2]); sum(tmp[(2*K+2):(2*K+1+choose(K,2)),2])
+tmp2 = tmp; tmp2[,2] = round(tmp[,2],4)
+tmp2 
+
+tmp3 = GammaToTheta.QE(Gamma0=as.vector(tmp[,2]),L.All.expd0=L.all.exp.qe, k0=K,Full.designMatrix=FALSE)
+round(tmp3$x - theta.QE[1,],4)
+sqrt(crossprod(tmp3$fvec))
+```
+
+
+# General Log Linear Model (LL)
+## $2^k-1$ parameters
+```{r, echo=FALSE}
+theta0 = c(theta.QE, rnorm(2^K-1-length(theta.QE),-1,sd=0.1))
+theta0 = c(theta.QE, rep(0,2^K-1-length(theta.QE)))
+
+L.all.exp = foreach(i=1:nrow(L.all), .combine=rbind) %dopar% {
+      expandL.LL(L.all[i,])
+}
+
+tmp3 = GammaToTheta(Gamma0=as.vector(tmp[,2]),L.All.expd0=L.all.exp, k0=K)
+round(tmp3$x - theta0,4)
+sqrt(crossprod(tmp3$fvec))
+```
+
+# Marginal Means
+```{r}
+Muk = ThetaToMu(Theta=theta.QE, L.All.expd=L.all.exp.qe, k=K)
+Theta1.hat = MuToTheta1(Mu=unlist(Muk), Theta2=theta.QE[-(1:K)], 
+                        L.All.expd=L.all.exp.qe, k=K)
+Theta1.hat - theta.QE[1:K]
+
+gamma.hat = MuTheta2ToGamma(Mu=unlist(Muk), Theta2=theta.QE[-(1:K)], 
+                        L.All.expd=L.all.exp.qe, k=K)
+mu.hat = GammaToMu(gamma.hat[,2], L.all.exp.qe, K)
+mu.hat-Muk
+```
+
