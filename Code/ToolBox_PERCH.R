@@ -348,7 +348,7 @@ MuTheta2ToGamma = function(Mu, Theta2, L.All.expd, k)
       Gamma
 }
 
-# TODO:
+
 GammaToMu = function(Gamma, L.All.expd, k)
 {
       # vector of S_i
@@ -371,6 +371,19 @@ GammaToMu = function(Gamma, L.All.expd, k)
       }
       data.frame(Mu_k = mus)
 }
+
+# sample measurements from latent state with TPR and FPR
+LtoY = function(L,TPR,FPR)
+{
+      k = ncol(L)
+      notL = 1-L
+      registerDoMC(4) 
+      Y= foreach(i=1:nrow(L), .combine=rbind) %dopar% {
+            rbinom(k,1,L[i,]*TPR+notL[i,]*FPR)
+      }
+      Y
+}
+
 
 # Sample data L based on prior on Pi and Mu, under general log linear model
 rDataWithPiMu.LL = function(K, mu.prior, pi.prior, n)
@@ -400,7 +413,7 @@ rDataWithPiMu.LL = function(K, mu.prior, pi.prior, n)
             MuMat[i,] = as.numeric(L.all.exp[,i]==1)
       }
       
-      # TODO: number of iter and output should be adaptive according to K
+      # number of iter and output should be adaptive according to K
       Phis = xsample( E = rbind(PiMat,MuMat), F = c(pi.prior[-1],mu.prior)/pi.prior[1], G = diag(rep(1,J1)), H = rep(0,J1),
                       iter = 6000, output = 1000, type = "cda")
       
@@ -582,7 +595,7 @@ density.YMuPi0 = function(K, dat, y=NULL, mu, pi0, SigmaInPrior, logscale=FALSE,
       }
 }
 
-
+## posterior sampler with piror on mu (logitnormal) and pi (unifor(0, 1-max(mu)))
 post.mu.pi0 = function(K, mu.init, pi0.init, iter, inner.iter, burnin, inner.burnin, dat, MH.par=c(1,1,1,0.5))
 {
       y = BitoMulti(dat=dat,K=K)
@@ -666,5 +679,328 @@ post.mu.pi0 = function(K, mu.init, pi0.init, iter, inner.iter, burnin, inner.bur
       list(posterior = posterior[-(1:burnin),], history.alpha = alpha_track[-(1:burnin),], 
            history.accept = accept_track[-(1:burnin),])
 }
+
+
+# ------------------------------------------------------------------------------------------------------------- #
+# for mu and pi full vector
+GenMatrices = function(K)
+{
+      L.all = as.matrix(AllComb(K))[-1,]
+      S = apply(L.all,1,sum)
+      index = order(S)
+      L.all = L.all[index,]
+      S = S[index]
+      J1 = length(S)
+      
+      #-- expand all possible combinations
+      L.all.exp = foreach(i=1:nrow(L.all), .combine=rbind) %dopar% {
+            expandL.LL(L.all[i,])
+      }
+      
+      MuMat = matrix(NA,nrow=K,ncol=J1)
+      for (i in 1:K)
+      {
+            MuMat[i,] = as.numeric(L.all.exp[,i]==1)
+      }
+      
+      PiMat = matrix(NA,nrow=K,ncol=J1)
+      for (i in 1:K)
+      {
+            PiMat[i,] = as.numeric(S==i)
+      }
+      return(list(MuMat=MuMat, PiMat=PiMat, J1=J1, Lmatrix = L.all.exp))
+}
+
+rPhiGivenPiMu.LL = function(K, mu, pi, burnin=30, n=10, method="cda", pars)
+{
+      # TODO: number of iter and output should be adaptive according to K
+      Phis = tryCatch(xsample( E = rbind(pars$PiMat,pars$MuMat), F = c(pi[-1],mu)/pi[1], G = diag(rep(1,pars$J1)), H = rep(0,pars$J1),
+                      iter = burnin+n, output = n+1, type = method), error = function(e) "Incompatible constraints.")
+      if (is.character(Phis)) return(NA)
+      else return( tryCatch(Phis$X[-1,], error=function(e){ print(e); print("pi:");print(pi);print("mu:"); print(mu); return(NA)}))
+}
+
+# Monte Carlo estimate of P[y|mu,pi]
+density.YgivenMuPi = function(K, dat, y=NULL, mu, pi, logscale=FALSE, burnin=300, n=100, method="cda", parMat)
+{
+      phis = suppressWarnings(rPhiGivenPiMu.LL(K=K, mu=mu, pi=pi, burnin=burnin, n=n, method=method, pars=parMat))
+      if (length(phis)<=1) 
+      {
+            warning("Incompatible Mu,Pi value, density value is considered 0.")
+            if (logscale)
+            {return(log(0))}
+            else
+            {return(0)}
+      }
+      else
+      {
+            if (length(y)<1)
+            {
+                  y = BitoMulti(dat=dat,K=K)
+            }
+            X = apply(phis, 1, function(x) dMultinom.phi(K=K, y=y, phi=x, logscale=logscale))
+            if (logscale)
+            {
+                  result = log(sum(exp(X))) -log(n)
+            }
+            else
+            {
+                  result = sum(X)/n
+            }
+            return(result)
+      }
+}
+
+# density of the prior p[mu, pi]
+## model 1: [mu] ~ logit.normal(0, Sigma),  [pi0|mu] ~ unif(0, 1-max(mu)), (pi1,..,piK) ~ Stick Breaking 
+prior.MuPi = function(mu, pi, Sigma, Alpha, logscale=FALSE)
+{
+      K = length(mu)
+      beta = log(mu/(1-mu))
+      density.mu = dmvnorm(x=beta, mean=rep(0,K), sigma=diag(Sigma), log=logscale)
+      density.pi0 = 1/(1-max(mu))
+      density.pi1toK = dStickBreak(sticks = pi[-1]/(1-pi[1]), Alpha, logscale)
+      if (logscale)
+      {
+            return(density.mu + log(density.pi0) + density.pi1toK)
+      }
+      else
+      {
+            return(density.mu*density.pi0*density.pi1toK)
+      }
+}
+
+rStickBreak = function(num_weights, alpha) 
+{
+      betas = rbeta(num_weights, 1, alpha)
+      remaining_stick_lengths = c(1, cumprod(1 - betas))[1:num_weights]
+      weights = remaining_stick_lengths * betas
+      weights
+}
+
+dStickBreak = function(sticks, alpha, logscale=FALSE)
+{
+      k = length(sticks)
+      w = c(1,1-cumsum(sticks))[1:k]
+      betas = sticks/w
+      if (logscale) return(sum(dbeta(betas[-k], 1, alpha, log=logscale)))
+      else return(prod(dbeta(betas[-k], 1, alpha, log=logscale)))
+}
+
+
+# joint density of p[y, mu, pi]
+density.YMuPi = function(K, dat, y=NULL, mu, pi, SigmaInPrior, AlphaInPrior, logscale=FALSE, inner.burnin, inner.iter, method="cda", ParMat)
+{
+      if (length(y)<1)
+      {
+            y = BitoMulti(dat=dat,K=K)
+      }
+      f1 = density.YgivenMuPi(K=K, y=y, mu=mu, pi=pi, logscale=logscale, burnin=inner.burnin, n=inner.iter, method=method, parMat=ParMat)
+      f2 = prior.MuPi(mu=mu, pi=pi, Sigma=SigmaInPrior, Alpha=AlphaInPrior, logscale=logscale)
+      if (logscale)
+      {
+            return(f1+f2)
+      }
+      else
+      {
+            return(f1*f2)
+      }
+}
+
+## posterior sampler with piror on mu (logitnormal) and pi (unifor(0, 1-max(mu)))
+# TODO!!!
+post.mu.pi.ByBlock = function(K, mu.init=NULL, pi.init, iter, inner.iter, burnin, inner.burnin, dat, MH.par=c(1,1,1,0.5), ParMatrix, prior.alpha)
+{
+      y = BitoMulti(dat=dat,K=K)
+      posterior = matrix(NA, nrow=iter, ncol=2*K+1)
+      posterior[1,(K+1):(2*K+1)] = pi.init
+      PiMat = ParMatrix$PiMat
+      MuMat = ParMatrix$MuMat
+      J1 = ParMatrix$J1
+      
+      tmp = xsample( E = PiMat, F = pi.init[-1]/pi.init[1], G = diag(rep(1,J1)), H = rep(0,J1),
+                     iter = 10, output = 5, type = "cda")
+      mu.sample = MuMat%*%t(tmp$X)*pi.init[1]  
+      posterior[1,1:K] = mu.sample[,2] # TODO: random init?
+      
+      # beta0.mat = matrix(NA, nrow=iter, ncol=K)
+      # beta0.mat[1,] = log(posterior[1,1:K]/(1-posterior[1,1:K]))
+      
+      accept_track = matrix(0, nrow=iter, ncol=2)
+      accept_track[1,] = rep(1, 2)
+      alpha_track = accept_track
+      
+      mu.candidate = posterior[1,1:K]
+      pi.candidate = posterior[1,(K+1):(2*K+1)]
+      message("Start block M-H sampling...")
+      for (i in 2:iter)
+      {
+            posterior[i,1:K] = mu.candidate
+            posterior[i,(K+1):(2*K+1)] = pi.candidate
+            print(i)
+            if (i%%25 == 0) print(c(i,posterior[i,]))
+            # sample mu
+            
+            tmp = xsample( E = PiMat, F = pi.candidate[-1]/pi.candidate[1], G = diag(rep(1,J1)), H = rep(0,J1),
+                           iter = 50, output = 40, type = "cda")
+            mu.sample = MuMat%*%t(tmp$X)*pi.candidate[1]  
+            mu.candidate = mu.sample[,sample(1:40,1)]
+            
+            log.alpha = density.YMuPi(K=K, y=y, mu=mu.candidate,pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+                                      logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method="cda", ParMat=ParMatrix) -
+                  density.YMuPi(K=K, y=y, mu=posterior[i,1:K],pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+                                logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method="cda", ParMat=ParMatrix)
+            alpha_track[i,1] = exp(log.alpha)
+            ratio = min(1,alpha_track[i,1])
+            u = runif(1)
+            if(u <= ratio) # accept
+            {
+                  posterior[i,1:K] = mu.candidate
+                  accept_track[i,1] = 1
+            }
+            else # reject
+            {
+                  mu.candidate = posterior[i,1:K] # reset candidate
+            }
+            #beta0.mat[i,] = log(posterior[i,1:K]/(1-posterior[i,1:K]))
+            # sample pi0
+#print("checkmark1")
+            pi0.candidate = posterior[i-1,K+1]+rnorm(1,0,MH.par[K+1])
+            if (pi0.candidate >= 1-max(mu.candidate) | pi0.candidate<=max(0, 1-sum(mu.candidate)))
+            {
+                  # reject
+                  pi.candidate = posterior[i,(K+1):(2*K+1)]
+            }
+            else
+            {
+#print("checkmark2")
+                  Phis = xsample( E = rbind(rep(1,2^K-1),MuMat), F = c(1-pi0.candidate,posterior[i,1:K])/pi0.candidate, G = diag(rep(1,J1)), H = rep(0,J1),
+                                  iter = 50, output = 40, type = "cda")
+                  pi.sample = PiMat%*%t(Phis$X)*pi0.candidate
+                  pi.candidate = c(pi0.candidate, pi.sample[,sample(1:40,1)])
+                  
+                  log.alpha = density.YMuPi(K=K, y=y, mu=mu.candidate,pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+                                            logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method="cda", ParMat=ParMatrix) -
+                        density.YMuPi(K=K, y=y, mu=mu.candidate,pi=posterior[i,(K+1):(2*K+1)], SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+                                      logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method="cda", ParMat=ParMatrix)
+                  alpha_track[i,2] = exp(log.alpha)
+                  ratio = min(1,alpha_track[i,2])
+                  u = runif(1)
+#print("checkmark3")
+                  if(u <= ratio) # accept
+                  {
+                        posterior[i, (K+1):(2*K+1)] = pi.candidate
+                        accept_track[i,2] = 1
+                  }
+                  else # reject
+                  {
+                        pi.candidate = posterior[i,(K+1):(2*K+1)]
+                  }
+            }
+#print("checkmark4")
+      }
+      colnames(posterior) = c(paste0("Mu_",1:K), paste0("Pi_",0:K))
+      list(posterior = posterior[-(1:burnin),], history.alpha = alpha_track[-(1:burnin),], 
+           history.accept = accept_track[-(1:burnin),])
+}
+
+
+post.mu.pi = function(K, mu.init=NULL, pi.init, iter, inner.iter, burnin, inner.burnin, dat, MH.par=c(1,1,1,0.5), ParMatrix, prior.alpha)
+{
+      y = BitoMulti(dat=dat,K=K)
+      posterior = matrix(NA, nrow=iter, ncol=2*K+1)
+      posterior[1,(K+1):(2*K+1)] = pi.init
+      PiMat = ParMatrix$PiMat
+      MuMat = ParMatrix$MuMat
+      J1 = ParMatrix$J1
+      
+      tmp = xsample( E = PiMat, F = pi.init[-1]/pi.init[1], G = diag(rep(1,J1)), H = rep(0,J1),
+                      iter = 50, output = 10, type = "cda")
+      mu.sample = MuMat%*%t(tmp$X)*pi.init[1]  
+      posterior[1,1:K] = mu.sample[,2] # TODO: random init?
+      
+      beta0.mat = matrix(NA, nrow=iter, ncol=K)
+      beta0.mat[1,] = log(posterior[1,1:K]/(1-posterior[1,1:K]))
+      
+      accept_track = matrix(0, nrow=iter, ncol=K+1)
+      accept_track[1,] = rep(1, K+1)
+      alpha_track = accept_track
+      
+      mu.candidate = posterior[1,1:K]
+      pi.candidate = posterior[1,(K+1):(2*K+1)]
+      for (i in 2:iter)
+      {
+            posterior[i,1:K] = mu.candidate
+            posterior[i,(K+1):(2*K+1)] = pi.candidate
+            
+            print(c(i,posterior[i,]))
+            # sample mu
+            for (j in 1:K)
+            {
+                  # sample logit mu, name it beta0
+                  beta0_j.new = beta0.mat[i-1,j] + rnorm(1,0,MH.par[j])
+                  mu.candidate[j] = 1/(1+exp(-beta0_j.new))
+                  if (mu.candidate[j] >= 1-pi.candidate[1] | sum(mu.candidate) < 1-pi.candidate[1])
+                  {
+                        mu.candidate[j] = posterior[i,j] # reset candidate
+                  }
+                  else
+                  {
+                        log.alpha = density.YMuPi(K=K, y=y, mu=mu.candidate,pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+                                                   logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method="cda", ParMat=ParMatrix) -
+                              density.YMuPi(K=K, y=y, mu=posterior[i,1:K],pi=posterior[i,(K+1):(2*K+1)], SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+                                             logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method="cda", ParMat=ParMatrix)
+                        alpha_track[i,j] = exp(log.alpha)
+                        ratio = min(1,alpha_track[i,j])
+                        u = runif(1)
+                        if(u <= ratio) # accept
+                        {
+                              posterior[i,j] = mu.candidate[j]
+                              accept_track[i,j] = 1
+                        }
+                        else # reject
+                        {
+                              mu.candidate[j] = posterior[i,j] # reset candidate
+                        }
+                  }
+            }
+            beta0.mat[i,] = log(posterior[i,1:K]/(1-posterior[i,1:K]))
+            # sample pi0
+            pi0.candidate = posterior[i-1,K+1]+rnorm(1,0,MH.par[K+1])
+            if (pi0.candidate >= 1-max(mu.candidate) | pi0.candidate<=max(0, 1-sum(mu.candidate)))
+            {
+                  # reject
+                  pi.candidate = posterior[i,(K+1):(2*K+1)]
+            }
+            else
+            {
+                  Phis = xsample( E = rbind(rep(1,2^K-1),MuMat), F = c(1-pi0.candidate,posterior[i,1:K])/pi0.candidate, G = diag(rep(1,J1)), H = rep(0,J1),
+                                  iter = 50, output = 40, type = "cda")
+                  pi.sample = PiMat%*%t(Phis$X)*pi0.candidate
+                  pi.candidate = c(pi0.candidate, pi.sample[,sample(1:40,1)])
+                  
+                  log.alpha = density.YMuPi(K=K, y=y, mu=mu.candidate,pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+                                             logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method="cda", ParMat=ParMatrix) -
+                        density.YMuPi(K=K, y=y, mu=mu.candidate,pi=posterior[i,(K+1):(2*K+1)], SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+                                       logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method="cda", ParMat=ParMatrix)
+                  alpha_track[i,K+1] = exp(log.alpha)
+                  ratio = min(1,alpha_track[i,K+1])
+                  u = runif(1)
+                  if(u <= ratio) # accept
+                  {
+                        posterior[i, (K+1):(2*K+1)] = pi.candidate
+                        accept_track[i,K+1] = 1
+                  }
+                  else # reject
+                  {
+                        pi.candidate = posterior[i,(K+1):(2*K+1)]
+                  }
+            }
+      }
+      colnames(posterior) = c(paste0("Mu_",1:K), paste0("Pi_",0:K))
+      list(posterior = posterior[-(1:burnin),], history.alpha = alpha_track[-(1:burnin),], 
+           history.accept = accept_track[-(1:burnin),])
+}
+
 
 

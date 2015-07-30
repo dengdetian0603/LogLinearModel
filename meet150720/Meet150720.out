@@ -1,0 +1,10 @@
+\BOOKMARK [1][-]{section.1}{Model Specification}{}% 1
+\BOOKMARK [1][-]{section.2}{Posterior Distribution}{}% 2
+\BOOKMARK [2][-]{subsection.2.1}{On sampling [, | L]}{section.2}% 3
+\BOOKMARK [3][-]{subsubsection.2.1.1}{General model}{subsection.2.1}% 4
+\BOOKMARK [2][-]{subsection.2.2}{Example for K=3 with prior on \(, 0\)}{section.2}% 5
+\BOOKMARK [3][-]{subsubsection.2.2.1}{The Feasible Space}{subsection.2.2}% 6
+\BOOKMARK [3][-]{subsubsection.2.2.2}{Sampling the Posterior Distribution}{subsection.2.2}% 7
+\BOOKMARK [2][-]{subsection.2.3}{Example for K=3 with prior on \(, \)}{section.2}% 8
+\BOOKMARK [3][-]{subsubsection.2.3.1}{The Feasible Space}{subsection.2.3}% 9
+\BOOKMARK [3][-]{subsubsection.2.3.2}{Sampling the Posterior Distribution}{subsection.2.3}% 10
