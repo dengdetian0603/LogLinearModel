@@ -722,7 +722,7 @@ rPhiGivenPiMu.LL = function(K, mu, pi, burnin=30, n=10, method="cda", pars)
 {
       # TODO: number of iter and output should be adaptive according to K
       Phis = tryCatch(xsample( E = rbind(pars$PiMat,pars$MuMat), F = c(pi[-1],mu)/pi[1], G = diag(rep(1,pars$J1)), H = rep(0,pars$J1),
-                      iter = n, burnin = burnin, type = method), error = function(e) "Incompatible constraints.")
+                      iter = n, burnin = burnin, type = method, test=FALSE), error = function(e) "Incompatible constraints.")
       if (is.character(Phis)) return(NA)
       else return( tryCatch(Phis$X[-1,], error=function(e){ print(e); print("pi:");print(pi);print("mu:"); print(mu); return(NA)}))
 }
@@ -926,7 +926,7 @@ post.mu.pi.ByBlock = function(K, mu.init=NULL, pi.init, iter, inner.iter, burnin
       
       # Initialize
       tmp = xsample( E = PiMat, F = pi.init[-1]/pi.init[1], G = diag(rep(1,J1)), H = rep(0,J1),
-                     iter = 10, burnin = 5, type = "cda")
+                     iter = 10, burnin = 5, type = "cda", test=FALSE)
       mu.sample = MuMat%*%t(tmp$X)*pi.init[1]  
       posterior[1,1:K] = mu.sample[,2] # TODO: random init?
       
@@ -959,7 +959,7 @@ post.mu.pi.ByBlock = function(K, mu.init=NULL, pi.init, iter, inner.iter, burnin
             if (accept_track[i-1,2]==1 | mean(accept_track[max(1, i-20):(i-1),1]) < 0.05)
             {# sample new phis only if pis have been up updated or mu have not been updated for 20 iteration
                   Phis.givenPi = xsample( E = PiMat, F = pi.candidate[-1]/pi.candidate[1], G = diag(rep(1,J1)), H = rep(0,J1),
-                           iter = 2^K, burnin = 10, type = prosalMethod)
+                           iter = 2^K, burnin = 10, type = prosalMethod, test=FALSE)
                   mu.sample = MuMat%*%t(Phis.givenPi$X)*pi.candidate[1]  
             }
             # else use mu.sample from last iteration
@@ -994,7 +994,7 @@ post.mu.pi.ByBlock = function(K, mu.init=NULL, pi.init, iter, inner.iter, burnin
             {
                   
                   Phis.givenMu = xsample( E = rbind(rep(1,2^K-1),MuMat), F = c(1-pi0.candidate,posterior[i,1:K])/pi0.candidate, G = diag(rep(1,J1)), H = rep(0,J1),
-                                  iter = 2^K, burnin = 10, type = prosalMethod )
+                                  iter = 2^K, burnin = 10, type = prosalMethod, test=FALSE )
                   pi.sample = PiMat%*%t(Phis.givenMu$X)*pi0.candidate
                   pi.candidate = c(pi0.candidate, pi.sample[,sample(1:2^K,1)])
                   
