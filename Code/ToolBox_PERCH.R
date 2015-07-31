@@ -2,6 +2,7 @@ library(limSolve)
 library(doMC)
 library(foreach)
 
+#--------------------- Design Matrix Preparation ------------------------------------------------------
 # function expands observed vector to feature space
 expandL.QE = function(l) 
 {
@@ -37,7 +38,7 @@ expandL.LL = function(l)
       L.exp
 }
 
-
+#--------------------- Parameter transformation ----------------------------------------------------------
 # Calculate Pi based on QE parameter Thetas
 QE.ThetaToPi = function(theta, L.all.exp, K)
 {
@@ -77,6 +78,8 @@ PiToTheta = function(Pis)
       theta
 }
 
+
+# gamma is the probability of a cell conditional on its sum
 ThetaToGamma = function(Theta, L.All.expd, k)
 {
       theta = matrix(Theta,ncol=1)
@@ -372,6 +375,8 @@ GammaToMu = function(Gamma, L.All.expd, k)
       data.frame(Mu_k = mus)
 }
 
+
+#--------------------- Data transformation -----------------------------------------------------------------
 # sample measurements from latent state with TPR and FPR
 LtoY = function(L,TPR,FPR)
 {
@@ -384,7 +389,39 @@ LtoY = function(L,TPR,FPR)
       Y
 }
 
+# convert binary vector y to multinomial accumulative vector
+BitoMulti = function(dat, K)
+{
+      #-- dat should be a matrix wih K columns
+      if(!is.matrix(dat))
+      {
+            dat = matrix(dat, nrow = 1)
+      }
+      
+      #-- get all possible combinations
+      L.all = as.matrix(AllComb(K))
+      S = apply(L.all,1,sum)
+      index = order(S)
+      L.all = L.all[index,]
+      S = S[index]
+      J1 = length(S)
+      
+      label = apply(L.all,1,function(x) paste(as.character(x),collapse=""))
+      dat.lab = apply(dat,1,function(x) paste(as.character(x),collapse=""))
+      dat.tab = table(dat.lab)
+      
+      y = rep(0, 2^K)
+      for (i in 1:length(dat.tab))
+      {
+            j = which(label==names(dat.tab)[i])
+            y[j] = dat.tab[i]
 
+      }
+      names(y)=label
+      y
+}
+
+#--------------------- Data sampling ------------------------------------------------------------------------
 # Sample data L based on prior on Pi and Mu, under general log linear model
 rDataWithPiMu.LL = function(K, mu.prior, pi.prior, n)
 {
@@ -492,38 +529,8 @@ GetVol.mupi0 = function(mu, pi0, n)
                       AcceptRatio = ratio, CandidateSample.n = N, VolSize = Vol.candidate))
 }
 
-# convert binary vector y to multinomial accumulative vector
-BitoMulti = function(dat, K)
-{
-      #-- dat should be a matrix wih K columns
-      if(!is.matrix(dat))
-      {
-            dat = matrix(dat, nrow = 1)
-      }
-      
-      #-- get all possible combinations
-      L.all = as.matrix(AllComb(K))
-      S = apply(L.all,1,sum)
-      index = order(S)
-      L.all = L.all[index,]
-      S = S[index]
-      J1 = length(S)
-      
-      label = apply(L.all,1,function(x) paste(as.character(x),collapse=""))
-      dat.lab = apply(dat,1,function(x) paste(as.character(x),collapse=""))
-      dat.tab = table(dat.lab)
-      
-      y = rep(0, 2^K)
-      for (i in 1:length(dat.tab))
-      {
-            j = which(label==names(dat.tab)[i])
-            y[j] = dat.tab[i]
 
-      }
-      names(y)=label
-      y
-}
-
+#--------------------- Density calculation with Prior on Mu Pi0 -----------------------------------------------
 # calculate multinomial density given phi and raw data matrix/vector
 dMultinom.phi = function(K, dat, y=NULL , phi, logscale=FALSE)
 {
@@ -681,7 +688,7 @@ post.mu.pi0 = function(K, mu.init, pi0.init, iter, inner.iter, burnin, inner.bur
 }
 
 
-# ------------------------------------------------------------------------------------------------------------- #
+# ---------------------- with Prior on Mu Pi ---------------------------------------------------------- #
 # for mu and pi full vector
 GenMatrices = function(K)
 {
@@ -787,7 +794,7 @@ dStickBreak = function(sticks, alpha, logscale=FALSE)
       else return(prod(dbeta(betas[-k], 1, alpha, log=logscale)))
 }
 
-
+# ---------------------- with Measurement Error ----------------------------------------------------------
 # joint density of p[y, mu, pi]
 density.YMuPi = function(K, dat, y=NULL, mu, pi, SigmaInPrior, AlphaInPrior, logscale=FALSE, inner.burnin, inner.iter, method="cda", ParMat)
 {
@@ -864,7 +871,7 @@ post.mu.pi.ByBlock = function(K, mu.init=NULL, pi.init, iter, inner.iter, burnin
             }
             #beta0.mat[i,] = log(posterior[i,1:K]/(1-posterior[i,1:K]))
             # sample pi0
-#print("checkmark1")
+            #print("checkmark1")
             pi0.candidate = posterior[i-1,K+1]+rnorm(1,0,MH.par[K+1])
             if (pi0.candidate >= 1-max(mu.candidate) | pi0.candidate<=max(0, 1-sum(mu.candidate)))
             {
@@ -873,7 +880,7 @@ post.mu.pi.ByBlock = function(K, mu.init=NULL, pi.init, iter, inner.iter, burnin
             }
             else
             {
-#print("checkmark2")
+            #print("checkmark2")
                   Phis = xsample( E = rbind(rep(1,2^K-1),MuMat), F = c(1-pi0.candidate,posterior[i,1:K])/pi0.candidate, G = diag(rep(1,J1)), H = rep(0,J1),
                                   iter = 50, output = 40, type = "cda")
                   pi.sample = PiMat%*%t(Phis$X)*pi0.candidate
@@ -886,7 +893,7 @@ post.mu.pi.ByBlock = function(K, mu.init=NULL, pi.init, iter, inner.iter, burnin
                   alpha_track[i,2] = exp(log.alpha)
                   ratio = min(1,alpha_track[i,2])
                   u = runif(1)
-#print("checkmark3")
+            #print("checkmark3")
                   if(u <= ratio) # accept
                   {
                         posterior[i, (K+1):(2*K+1)] = pi.candidate
@@ -897,7 +904,7 @@ post.mu.pi.ByBlock = function(K, mu.init=NULL, pi.init, iter, inner.iter, burnin
                         pi.candidate = posterior[i,(K+1):(2*K+1)]
                   }
             }
-#print("checkmark4")
+            #print("checkmark4")
       }
       colnames(posterior) = c(paste0("Mu_",1:K), paste0("Pi_",0:K))
       list(posterior = posterior[-(1:burnin),], history.alpha = alpha_track[-(1:burnin),], 
