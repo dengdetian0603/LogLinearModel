@@ -995,7 +995,7 @@ post.mu.pi.ByBlock = function(K, mu.init=NULL, pi.init, iter, inner.iter, burnin
                   
                   Phis.givenMu = xsample( E = rbind(rep(1,2^K-1),MuMat), F = c(1-pi0.candidate,posterior[i,1:K])/pi0.candidate, G = diag(rep(1,J1)), H = rep(0,J1),
                                   iter = 2^K, burnin = 10, type = prosalMethod )
-                  pi.sample = PiMat%*%t(Phis$X)*pi0.candidate
+                  pi.sample = PiMat%*%t(Phis.givenMu$X)*pi0.candidate
                   pi.candidate = c(pi0.candidate, pi.sample[,sample(1:2^K,1)])
                   
                   log.alpha = density.YMuPi(K=K, y=y, mu=mu.candidate,pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
