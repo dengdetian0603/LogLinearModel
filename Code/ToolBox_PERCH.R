@@ -722,7 +722,7 @@ rPhiGivenPiMu.LL = function(K, mu, pi, burnin=30, n=10, method="cda", pars)
 {
       # TODO: number of iter and output should be adaptive according to K
       Phis = tryCatch(xsample( E = rbind(pars$PiMat,pars$MuMat), F = c(pi[-1],mu)/pi[1], G = diag(rep(1,pars$J1)), H = rep(0,pars$J1),
-                      iter = burnin+n, output = n+1, type = method), error = function(e) "Incompatible constraints.")
+                      iter = n, burnin = burnin, type = method), error = function(e) "Incompatible constraints.")
       if (is.character(Phis)) return(NA)
       else return( tryCatch(Phis$X[-1,], error=function(e){ print(e); print("pi:");print(pi);print("mu:"); print(mu); return(NA)}))
 }
@@ -914,7 +914,8 @@ post.mu.pi = function(K, mu.init=NULL, pi.init, iter, inner.iter, burnin, inner.
 }
 
 ## posterior sampler with piror on mu (logitnormal) and pi (unifor(0, 1-max(mu)))
-post.mu.pi.ByBlock = function(K, mu.init=NULL, pi.init, iter, inner.iter, burnin, inner.burnin, dat, MH.sigmaOfpi0, ParMatrix, prior.alpha)
+post.mu.pi.ByBlock = function(K, mu.init=NULL, pi.init, iter, inner.iter, burnin, inner.burnin, dat, 
+      MH.sigmaOfpi0, ParMatrix, prior.alpha, prosalMethod = "mirror", densityMethod = "cda")
 {
       y = BitoMulti(dat=dat,K=K)
       posterior = matrix(NA, nrow=iter, ncol=2*K+1)
@@ -923,8 +924,9 @@ post.mu.pi.ByBlock = function(K, mu.init=NULL, pi.init, iter, inner.iter, burnin
       MuMat = ParMatrix$MuMat
       J1 = ParMatrix$J1
       
+      # Initialize
       tmp = xsample( E = PiMat, F = pi.init[-1]/pi.init[1], G = diag(rep(1,J1)), H = rep(0,J1),
-                     iter = 10, output = 5, type = "cda")
+                     iter = 10, burnin = 5, type = "cda")
       mu.sample = MuMat%*%t(tmp$X)*pi.init[1]  
       posterior[1,1:K] = mu.sample[,2] # TODO: random init?
       
@@ -952,17 +954,21 @@ post.mu.pi.ByBlock = function(K, mu.init=NULL, pi.init, iter, inner.iter, burnin
                   print("Trailing 50 accept rate:")
                   print(apply(accept_track[max(1, i-49):i,],2,mean))
             }
-            # sample mu
-            
-            tmp = xsample( E = PiMat, F = pi.candidate[-1]/pi.candidate[1], G = diag(rep(1,J1)), H = rep(0,J1),
-                           iter = 50, output = 40, type = "cda")
-            mu.sample = MuMat%*%t(tmp$X)*pi.candidate[1]  
-            mu.candidate = mu.sample[,sample(1:40,1)]
+
+            # sample mu by block
+            if (accept_track[i-1,2]==1 | mean(accept_track[max(1, i-20):(i-1),1]) < 0.05)
+            {# sample new phis only if pis have been up updated or mu have not been updated for 20 iteration
+                  Phis.givenPi = xsample( E = PiMat, F = pi.candidate[-1]/pi.candidate[1], G = diag(rep(1,J1)), H = rep(0,J1),
+                           iter = 2^K, burnin = 10, type = prosalMethod)
+                  mu.sample = MuMat%*%t(Phis.givenPi$X)*pi.candidate[1]  
+            }
+            # else use mu.sample from last iteration
+            mu.candidate = mu.sample[,sample(1:2^K,1)]
             
             log.alpha = density.YMuPi(K=K, y=y, mu=mu.candidate,pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
-                                      logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method="cda", ParMat=ParMatrix) -
+                                      logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix) -
                   density.YMuPi(K=K, y=y, mu=posterior[i,1:K],pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
-                                logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method="cda", ParMat=ParMatrix)
+                                logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix)
             alpha_track[i,1] = exp(log.alpha)
             ratio = min(1,alpha_track[i,1])
             u = runif(1)
@@ -986,16 +992,16 @@ post.mu.pi.ByBlock = function(K, mu.init=NULL, pi.init, iter, inner.iter, burnin
             }
             else
             {
-
-                  Phis = xsample( E = rbind(rep(1,2^K-1),MuMat), F = c(1-pi0.candidate,posterior[i,1:K])/pi0.candidate, G = diag(rep(1,J1)), H = rep(0,J1),
-                                  iter = 50, output = 40, type = "cda")
+                  
+                  Phis.givenMu = xsample( E = rbind(rep(1,2^K-1),MuMat), F = c(1-pi0.candidate,posterior[i,1:K])/pi0.candidate, G = diag(rep(1,J1)), H = rep(0,J1),
+                                  iter = 2^K, burnin = 10, type = prosalMethod )
                   pi.sample = PiMat%*%t(Phis$X)*pi0.candidate
-                  pi.candidate = c(pi0.candidate, pi.sample[,sample(1:40,1)])
+                  pi.candidate = c(pi0.candidate, pi.sample[,sample(1:2^K,1)])
                   
                   log.alpha = density.YMuPi(K=K, y=y, mu=mu.candidate,pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
-                                            logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method="cda", ParMat=ParMatrix) -
+                                            logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix) -
                         density.YMuPi(K=K, y=y, mu=mu.candidate,pi=posterior[i,(K+1):(2*K+1)], SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
-                                      logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method="cda", ParMat=ParMatrix)
+                                      logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix)
                   alpha_track[i,2] = exp(log.alpha)
                   ratio = min(1,alpha_track[i,2])
                   u = runif(1)
