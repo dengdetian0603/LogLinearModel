@@ -12,26 +12,6 @@ D = 2^K-1
 # True value of theta
 set.seed(123)
 Lmat = GenMatrices(K)
-unweighted = c(0.1, cumprod(1 - rep(0.5,K)))
-pi.prior = round(unweighted/(sum(unweighted)),3)
-Phis = xsample( E = Lmat$PiMat, F = pi.prior[-1]/pi.prior[1], G = diag(rep(1,Lmat$J1)), H = rep(0,Lmat$J1),
-                iter = 100, output = 100, type = "mirror")$X
-phis = Phis[73,]
-# True parameter values
-TruePi0 = 1/(sum(phis)+1)
-TruePi1toK = Lmat$PiMat%*%phis*TruePi0
-TruePi = round(c(TruePi0, TruePi1toK),3)
-TrueMu = as.vector(round(Lmat$MuMat%*%phis*TruePi0,3))
-
-# MLE of saturated model on perfect data
-muhat = apply(dat, 2, mean)
-pihat = table(apply(dat,1,sum))/n
-pihat[(length(pihat)+1):(K+1)] = 0
-
-# MLE on imperfect data
-muhat2 = apply(measure, 2, mean)
-pihat2 = table(apply(measure,1,sum))/n
-pihat2[(length(pihat2)+1):(K+1)] = 0
 
 # prior
 Sigma = 1.6
