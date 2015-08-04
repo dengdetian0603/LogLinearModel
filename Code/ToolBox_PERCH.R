@@ -1067,7 +1067,6 @@ density.MgivenY.plural = function(Mmat, Ymat, tprMat, logscale=TRUE)
 
 # Monte Carlo estimate of P[m | mu,pi,tpr,fpr]
 # for M is a single observation, i.e. a vector of length K
-#### TODO!!!
 density.MgivenMuPi = function(K, M=NULL, mu, pi, logscale=FALSE, burnin=300, n=100, method="mirror", parMat, tprMat)
 {
       phis = suppressWarnings(rPhiGivenPiMu.LL(K=K, mu=mu, pi=pi, burnin=burnin, n=n, method=method, pars=parMat))
@@ -1082,20 +1081,52 @@ density.MgivenMuPi = function(K, M=NULL, mu, pi, logscale=FALSE, burnin=300, n=1
       else
       {
             Y.allpossibles = rbind(rep(0, K), parMat$Lmatrix[,1:K])
-            A = 1 + sum(phi)
-            probs = c(1,phi)/A
-
-            probs.Y = foreach(i = 1: 2^K, .combine=c) %dopar% {
-                  X = apply(phis, 1, function(x) dMultinom.phi(K=K, y=Y.allpossibles[i,], phi=x, logscale=logscale))
-                  if (logscale)
-                  {
-                        result = log(sum(exp(X))) -log(n)
-                  } else {
-                        result = sum(X)/n
-                  }
+            probs.Y = matrix(NA, nrow = nrow(phis), ncol = 2^K)
+            for (i in 1:nrow(phis))
+            {
+                  probs.Y[i,] = c(1, phis[i,])/(1+sum(phis[i,]))
             }
-            return(probs.Y)
+            prob.Y = apply(probs.Y, 2, mean)  
+            density_i = apply(Y.allpossibles, 1, function(x) density.MgivenY(M=M, Y=x, tprMat=tprMat, logscale=FALSE))
+            result = crossprod(prob.Y, density_i)
+
+            if (logscale)
+            {return(log(result))}
+            else
+            {return(result)}
       }
 }
 
+################# TODO
+density.MgivenMuPi.plural = function(K, Mmat=NULL, mu, pi, logscale=FALSE, burnin=30, n=100, method="mirror", parMat, tprMat)
+{
+      phis = suppressWarnings(rPhiGivenPiMu.LL(K=K, mu=mu, pi=pi, burnin=burnin, n=n, method=method, pars=parMat))
+      if (length(phis)<=1) 
+      {
+            warning("Incompatible Mu,Pi value, density value is considered 0.")
+            if (logscale)
+            {return(log(0))}
+            else
+            {return(0)}
+      }
+      else
+      {
+            Y.allpossibles = rbind(rep(0, K), parMat$Lmatrix[,1:K])
+            probs.Y = matrix(NA, nrow = nrow(phis), ncol = 2^K)
+            for (i in 1:nrow(phis))
+            {
+                  probs.Y[i,] = c(1, phis[i,])/(1+sum(phis[i,]))
+            }
+            prob.Y = apply(probs.Y, 2, mean)  
+            results = foreach( i = 1:nrow(Mmat), .combine=c) %dopar% {
+                  densities = apply(Y.allpossibles, 1, function(x) density.MgivenY(M=Mmat[i,], Y=x, tprMat=tprMat, logscale=FALSE))  
+                  crossprod(prob.Y, densities)
+            }
+
+            if (logscale)
+            {return(sum(log(results)))}
+            else
+            {return(prod(results))}
+      }
+}
 
