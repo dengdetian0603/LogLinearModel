@@ -78,7 +78,9 @@ Define intermediate parameter $\phi_j = \exp(\theta^T\tilde{l}_j) >0$, $\Theta =
 B \vec{\phi} = & \vec{\pi}/\pi(0)\\ 
 C \vec{\phi} = & \vec{\mu}/\pi(0)
 \end{align}
-Note that B and C are not independent constraints and should be compatible so that $\binom{B}{C}$ has rank $2K-1$.\\
+Note that B and C are not independent constraints and should be compatible so that $\binom{B}{C}$ has rank $2K-1$.
+Explicitly, $\mu$ and $\pi$ must satisfy  
+\[ \sum_{k=1}^K \mu_k = \sum_{k=1}^K k\pi_k\]
 Based on [1][2], we can sample $\vec{\phi}$ from Uniform distribution subject to the above linear constraints efficiently and robustly. Then $\Theta$ are the solutions to the linear system ($J_1$ equations with $J_1$ unknowns):
 \[\tilde{L}\Theta = \log \vec{\phi}\]
 
@@ -107,7 +109,7 @@ $P(\pi | \mu) = P(\pi_0 | \mu)P(\pi_1,.., \pi_K |\pi_0, \alpha)$, where $P(\pi_0
 
 \newpage
 
-\subsection{Sampling Algorithm}
+\subsubsection{Sampling Algorithm}
 \begin{algorithm}[H]
 \caption{Usample(n, $\mu, \pi_0, \pi_{0-}$)}
 \begin{algorithmic}[1]
@@ -160,8 +162,22 @@ C \phi = & \mu/\pi_0
 
 \newpage
 \subsection{Measurement Error Model}
+Let $M$ be the observed measurement, and $L$ be the latent true state, with $\gamma$ and $\delta$ representing the TPR and FPR.
+\begin{align*}
+P(\mu, \pi , \gamma, \delta|M) \propto & P(M, \mu, \pi, \gamma, \delta) \\
+= & P(M | \mu, \pi, \gamma, \delta) P(\mu, \pi, \gamma, \delta) \\
+= & \sum_{L \in \mathbb{L}}  P(M, L | \mu, \pi, \gamma, \delta) P(\mu, \pi, \gamma, \delta) \\ 
+= & \sum_{L \in \mathbb{L}} \big[ P(M | L, \gamma, \delta) P(L | \mu, \pi) \big ] P(\mu, \pi) P(\gamma) P(\delta) \\ 
+\end{align*}
+where 
+\begin{align*}
+ P(M | L, \gamma, \delta) = & \prod_{k=1}^K P(M_k | L_k, \gamma, \delta) \text{\ \ (conditional independence assumption)}\\
+ = & \prod_{k=1}^K (\gamma^{L_k} \delta^{1-L_k})^{M_k} [(1-\gamma)^{L_k} (1-\delta)^{1-L_k}]^{1-M_k}
+\end{align*}
+$P(\gamma)$ and $ P(\delta)$ are beta priors, and $P(L | \mu, \pi)  P(\mu, \pi)$ is defined in the same way as in previous section.
 
 
+\subsubsection{Sampling Algorithm}
 
 %\begin{table}[htbp]
 %\begin{adjustwidth}{-0.5in}{-1in}
