@@ -25,12 +25,12 @@ pi1toK = sapply(pi0, function(x) {tmp=rStickBreak(K-1, Alpha);
 prior = apply(cbind(mu,pi0,t(pi1toK)),2,mean)
 
 #---------------------- Chain Diagonosis -------------------------------- # 
-load("~/Downloads/Iter1000_dat_1.RData")
+load("~/Documents/workspace/Iter4500_dat_7.RData")
 tmp = Posterior
-apply(tmp$history.accept[1:700,],2,mean)
+apply(tmp$history.accept[3000:4000,],2,mean)
 
 library(coda)
-mu.chain = mcmc(tmp$posterior[,1:15])
+mu.chain = mcmc(tmp$posterior[3000:4000,])
 summary(mu.chain)
 plot(mu.chain)
 autocorr.plot(mu.chain)
