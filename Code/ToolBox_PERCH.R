@@ -1066,8 +1066,9 @@ density.MgivenY.plural = function(Mmat, Ymat, tprMat, logscale=TRUE)
 
 
 # Monte Carlo estimate of P[m | mu,pi,tpr,fpr]
+# for M is a single observation, i.e. a vector of length K
 #### TODO!!!
-density.MgivenMuPi = function(K, Mdat, mu, pi, logscale=FALSE, burnin=300, n=100, method="cda", parMat)
+density.MgivenMuPi = function(K, M=NULL, mu, pi, logscale=FALSE, burnin=300, n=100, method="mirror", parMat, tprMat)
 {
       phis = suppressWarnings(rPhiGivenPiMu.LL(K=K, mu=mu, pi=pi, burnin=burnin, n=n, method=method, pars=parMat))
       if (length(phis)<=1) 
@@ -1080,24 +1081,20 @@ density.MgivenMuPi = function(K, Mdat, mu, pi, logscale=FALSE, burnin=300, n=100
       }
       else
       {
-            Y.allpossibles = parMat$Lmatrix[,1:K]
-            A = 1 + sum(phis)
-                  probs = c(1,phis)/A
-                  dens = dmultinom(x=y, prob=probs,log=logscale)
+            Y.allpossibles = rbind(rep(0, K), parMat$Lmatrix[,1:K])
+            A = 1 + sum(phi)
+            probs = c(1,phi)/A
 
-            prob.YgivenMuPi = 
-            ################################### TODO
-            X = apply(phis, 1, function(x) dMultinom.phi(K=K, y=y, phi=x, logscale=logscale))
-            
-            if (logscale)
-            {
-                  result = log(sum(exp(X))) -log(n)
+            probs.Y = foreach(i = 1: 2^K, .combine=c) %dopar% {
+                  X = apply(phis, 1, function(x) dMultinom.phi(K=K, y=Y.allpossibles[i,], phi=x, logscale=logscale))
+                  if (logscale)
+                  {
+                        result = log(sum(exp(X))) -log(n)
+                  } else {
+                        result = sum(X)/n
+                  }
             }
-            else
-            {
-                  result = sum(X)/n
-            }
-            return(result)
+            return(probs.Y)
       }
 }
 
