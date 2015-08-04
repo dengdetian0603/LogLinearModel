@@ -25,7 +25,7 @@ pi1toK = sapply(pi0, function(x) {tmp=rStickBreak(K-1, Alpha);
 prior = apply(cbind(mu,pi0,t(pi1toK)),2,mean)
 
 #---------------------- Chain Diagonosis -------------------------------- # 
-load("~/Documents/workspace/Iter4500_dat_7.RData")
+load("~/Documents/workspace/Iter4500_dat_5.RData")
 tmp = Posterior
 apply(tmp$history.accept[3000:4000,],2,mean)
 

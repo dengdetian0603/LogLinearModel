@@ -1,0 +1,54 @@
+---
+title: "Chain Diagnostics"
+author: "Detian Deng"
+date: "August 4, 2015"
+output: html_document
+---
+
+Acceptance Rate
+```{r, echo=FALSE}
+load("~/Documents/workspace/Iter4500_dat_5.RData")
+tmp = Posterior
+apply(tmp$history.accept[3000:4000,],2,mean)
+
+library(coda)
+mc.chain = mcmc(tmp$posterior[3000:4000,])
+plot(mc.chain)
+
+```
+
+Using all samples after burning in period.
+```{r, echo=FALSE}
+est.compare
+mc.est = round(summary(mc.chain)$statistics[,1],3)
+est.compare[,3] = mc.est
+```
+Using the last 1000 samples.
+```{r, echo=FALSE}
+est.compare
+```
+
+Chain Diagnosis
+```{r, echo=FALSE}
+chain1 =  mcmc(tmp$posterior[1:2000,1:4])
+chain2 =  mcmc(tmp$posterior[-(1:2000),1:4])
+combinedchains = mcmc.list(chain1, chain2) 
+#plot(combinedchains)
+gelman.diag(combinedchains)
+gelman.plot(combinedchains)
+
+chain1 =  mcmc(tmp$posterior[1:2000,-(1:4)])
+chain2 =  mcmc(tmp$posterior[-(1:2000),-(1:4)])
+combinedchains = mcmc.list(chain1, chain2) 
+#plot(combinedchains)
+gelman.diag(combinedchains)
+#gelman.plot(combinedchains)
+```
+
+
+
+
+
+
+
+
