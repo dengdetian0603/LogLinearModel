@@ -1,0 +1,213 @@
+\documentclass[11 pt, a4paper]{article}  % list options between brackets
+\usepackage[nottoc,notlof,notlot,numbib]{tocbibind}
+\usepackage[margin=1.1 in]{geometry}
+\usepackage{fancyhdr}
+\usepackage{manfnt}
+\usepackage{pgf}
+\usepackage{amsmath,amssymb,natbib,graphicx}
+\usepackage{amsfonts}
+\DeclareMathAlphabet{\mathpzc}{OT1}{pzc}{m}{it}
+\usepackage{bbm}
+\usepackage{hyperref}
+\usepackage{float}
+\usepackage{mathrsfs} %mathscr{A}
+\usepackage{subfigure}
+\usepackage{chngpage}
+
+\usepackage{times}
+\usepackage{latexsym}
+\usepackage{caption}
+
+\usepackage{algorithm}
+\usepackage[noend]{algpseudocode}
+
+\newtheorem{axiom}{Axiom}[section]
+\newtheorem{result}{Result}[section]
+\newtheorem{example}{example}[section]
+\newtheorem{definition}{Definition}[section]
+\newtheorem{principle}{Principle}[section]
+\newtheorem{theorem}{Theorem}[section]% list packages between braces
+
+% type user-defined commands here
+%\newcommand{\vmu}{{\bf \mu}}
+%\newcommand{\vtheta1}{{\bf \theta^{(1)}}}
+%\newcommand{\vtheta2}{{\bf \theta^{(2)}}}
+%\newcommand{\vpi}{{\bf \pi}}}
+
+\newcommand{\gm}{\gamma}
+
+\begin{document}
+
+\title{Summary of Short-term Research Objectives}   % type title between braces
+\author{Detian Deng}         % type author(s) between braces
+\date{\today}    % type date between braces
+\maketitle
+
+%\begin{abstract}
+%\end{abstract}
+
+\section{Model Specification}             % section 1
+Let $L$ be a K-dimensional Bernoulli random variable denoting the true state.
+Consider the general log linear model:
+\begin{align*}
+f(l; \Theta) = & \exp \{\Theta_1^T l + \Theta_2^{T} u_2 + \ldots + \Theta_K^T u_K - A^*(\Theta)\}
+\end{align*}
+where $U_k$ is a ${K \choose k} \times 1$ vector of k-way cross-products, $k = 1,\ldots,K$,  and $\Theta = (\Theta_1,\ldots, \Theta_K)$ contains the the natural parameters, which is a $(2^K-1) \times 1$ vector.\\
+\ \\
+Model restrictions, let $\tilde{l} = (l,u_2,\dots,u_K)^T$, and $S = \sum_{j=1}^K L_j = s$ has some fixed pmf 
+\begin{align}
+\pi(s) := & P(S=s)\nonumber \\ 
+= & \frac{1}{A(\Theta)} \sum_{\tilde{l}:S=s}\exp \{ \Theta^T \tilde{l}\}  \text{ , } s = 0,1,\ldots, K \\
+A(\Theta) = & \sum_{\tilde{l}:l\in \{0,1\}^K}\exp \{ \Theta^T \tilde{l}\}
+\end{align}
+
+
+\newpage
+\section{Posterior Distribution}
+
+\subsection{General Model}
+For General model, $\tilde{L}$ is a square matrix with dimension $J_1 = 2^K-1$. Recall that 
+\begin{align}
+A(\Theta) = & \frac{1}{\pi(0)} \nonumber \\
+\pi(s) = & \frac{1}{A(\Theta)} \sum_{\tilde{l}:S=s}\exp \{ \Theta^T \tilde{l}\}  \text{ , } s = 1,\ldots, K \\
+\mu_k = & \frac{1}{A(\Theta)} \sum_{\tilde{l}:l_k=1}\exp \{ \Theta^T \tilde{l}\}  \text{ , } k = 1, \ldots, K
+\end{align}
+Define intermediate parameter $\phi_j = \exp(\theta^T\tilde{l}_j) >0$, $\Theta = (\theta^{(1)},\theta^{(2)}, \ldots, \theta^{(K)}), j= 1, \ldots, J_1$ and two $K \times J_1$ sub-design matrices $B$, $C$, where $B[k,j] = 1(\sum_{s=1}^K\tilde{L}[j,s]=k)$, $C[k,j] = \tilde{L}[j,k]$. Thus (3) and (4) become
+\begin{align}
+\vec{\phi} > & 0\\
+B \vec{\phi} = & \vec{\pi}/\pi(0)\\ 
+C \vec{\phi} = & \vec{\mu}/\pi(0)
+\end{align}
+Note that B and C are not independent constraints and should be compatible so that $\binom{B}{C}$ has rank $2K-1$.\\
+Based on [1][2], we can sample $\vec{\phi}$ from Uniform distribution subject to the above linear constraints efficiently and robustly. Then $\Theta$ are the solutions to the linear system ($J_1$ equations with $J_1$ unknowns):
+\[\tilde{L}\Theta = \log \vec{\phi}\]
+
+Then the posterior distribution of $(\mu, \pi)$ given data $L$ becomes:
+\begin{align*}
+P(\mu, \pi |L) \propto & P(L, \mu, \pi) \\
+= & P(L | \mu, \pi) P(\mu, \pi) \\
+= & \int P(L, \phi | \mu, \pi) d \phi P(\mu, \pi) \\
+\propto & \int P(L | \phi) P(\phi | \mu,\pi) d \phi P(\mu, \pi) \\
+\approx & \sum P(L | \phi_h) P(\pi | \mu) P(\mu)
+\end{align*}
+where $P(L | \phi_h)$ is the log linear model density evaluated at $\phi_h$, which is sampled uniformly from the feasible region subject to constrains (5-7).\\
+$P(\mu)$ is a multivariate logit Normal density with mean $0$ and standard deviation $\Sigma$.\\
+$P(\pi | \mu) = P(\pi_0 | \mu)P(\pi_1,.., \pi_K |\pi_0, \alpha)$, where $P(\pi_0 | \mu)$ is a uniform density on $(0, 1-\max(\mu))$ and $P(\pi_1,..\pi_K |\pi_0, \alpha)$ is a Stick Breaking prior with shape parameter $\alpha$ on $(0, 1-\pi_0)$.
+
+
+%\subsubsection{QE model}
+%For QE model, $\tilde{L}$ is a $J_1\times J_2$, where $J_1 = 2^K-1, J_2 = \frac{1}{2}K(K+1)$.  Let $\theta = (\theta^{(1)},\theta^{(2)})$, we have a over-determined linear system after sampling $\vec{\phi}$: ($J_1$ equations with $J_2$ unknowns)
+%\[\tilde{L}\theta = \log \vec{\phi}\]
+%In this case, we can first find $\Theta$ as in last section and then solve the constrained Least Square problem to get the QE parameter estimates $\theta$:
+%\begin{align*}
+%\text{minimize } & ||\theta - \Theta||^2_2 \\
+%\text{subject to } & B e^{\tilde{L}\theta} =  \vec{\pi}/\pi(0)\\ 
+%\text{and } & C e^{\tilde{L}\theta} =  \vec{\mu}/\pi(0)
+%\end{align*} 
+
+\newpage
+
+\subsection{Sampling Algorithm}
+\begin{algorithm}[H]
+\caption{Usample(n, $\mu, \pi_0, \pi_{0-}$)}
+\begin{algorithmic}[1]
+\If {neither $\mu, \pi_{0-}$ is NULL}
+\State sample $\phi$ uniformly from feasible region defined by 
+\begin{align*}
+\phi > & 0\\
+B \phi = & \pi_{0-}/\pi_0\\ 
+C \phi = & \mu/\pi_0
+\end{align*}
+\ElsIf {only $\mu$ is NULL}
+\State sample $\phi$ uniformly from feasible region defined by 
+\begin{align*}
+\phi > & 0\\
+B \phi = & \pi_{0-}/\pi_0
+\end{align*}
+\Else
+\State sample $\phi$ uniformly from feasible region defined by 
+\begin{align*}
+\phi > & 0\\
+C \phi = & \mu/\pi_0
+\end{align*}
+\EndIf
+\State {\bf return} $n$ samples of $\phi$
+\end{algorithmic}
+\end{algorithm}
+
+
+\begin{algorithm}[H]
+\caption{SampleByBlock($n_{Iter}, n_{Burn}, L, \mu_{init}, \pi_{init}, \sigma$)}
+\begin{algorithmic}[1]
+\State Initialize $\mu^{(0)} = \mu_{init}$, $\pi^{(0)} = \pi_{init}$
+\For {$t \in 1 \text{ to } (n_{Iter} + n_{Burn})$}
+\State $\phi = \text{Usample} (1, \mu=\text{NULL}, (\pi_0,\pi_{0-})=\pi^{(t-1)})$
+\State $\mu^* = \pi_0^{(t-1)} C \phi $
+\State $\alpha = \frac{P(L, \mu^*, \pi^{(t-1)} )}{P(L, \mu^{(t-1)}, \pi^{(t-1)} )}$
+\State $\mu^{(t)} = \mu^*$ with probability $\max(1, \alpha)$; other wise, $\mu^{(t)} = \mu^{(t-1)}$
+\State $\pi^*_{0} = \text{logit}^{-1}[logit(pi_{0}^{(t-1)}) + \epsilon]$, where $\epsilon \sim $ N$(0, \sigma)$.
+\State $\phi = \text{Usample} (1, \mu=\mu^{(t)}, \pi_0=\pi^*_{0},\pi_{0-}=\text{NULL})$
+\State $\pi^*_{0-} = \pi^*_{0} B \phi$
+\State $\pi^* = (\pi^*_{0}, \pi^*_{0-})$
+\State $\alpha = \frac{P(L, \mu^{(t)}, \pi^* )}{P(L, \mu^{(t)}, \pi^{(t-1)} )}$
+\State $\pi^{(t)} = \pi^*$ with probability $\max(1, \alpha)$; other wise, $\pi^{(t)} = \pi^{(t-1)} $
+\EndFor
+\State {\bf return} $\mu^{(n_{Burn}+1)}$ to $\mu^{(n_{Burn} + n_{Iter})}$ and $\pi^{(n_{Burn}+1)}$ to $\pi^{(n_{Burn} + n_{Iter})}$
+\end{algorithmic}
+\end{algorithm}
+
+
+
+\newpage
+\subsection{Measurement Error Model}
+
+
+
+%\begin{table}[htbp]
+%\begin{adjustwidth}{-0.5in}{-1in}
+%\resizebox{0.7\textwidth}{!}{\begin{minipage}{\textwidth}
+%\caption{Summary of the model coefficients and standard error estimates}
+%\label{tab: coef}
+%
+%\begin{tabular}{llllll|lllll} 
+%\hline 
+% \\
+%\hline \\
+%\end{tabular}
+%\end{minipage}}
+%\end{adjustwidth}
+%\end{table}
+
+
+
+
+
+\newpage
+\section*{Reference}
+1. Smith RL . “Efficient Monte-Carlo Procedures for Generating Points Uniformly Dis- tributed over Bounded Regions.” Operations Research, 32(6), 1296–1308 (1984).\\ 
+2. Van den Meersche, Karel, K. E. R. Soetaert, and D. J. Van Oevelen. "xsample (): an R function for sampling linear inverse problems." Journal of Statistical Software 30 (2009).
+
+
+\end{document}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
