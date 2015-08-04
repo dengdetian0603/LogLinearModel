@@ -844,7 +844,7 @@ post.mu.pi = function(K, mu.init=NULL, pi.init, iter, inner.iter, burnin, inner.
             posterior[i,1:K] = mu.candidate
             posterior[i,(K+1):(2*K+1)] = pi.candidate
             
-            print(c(i,posterior[i,]))
+            print(c(i,accept_track[i,]))
             # sample mu
             for (j in 1:K)
             {
@@ -945,25 +945,25 @@ post.mu.pi.ByBlock = function(K, mu.init=NULL, pi.init, iter, inner.iter, burnin
       {
             posterior[i,1:K] = mu.candidate
             posterior[i,(K+1):(2*K+1)] = pi.candidate
-            print(i)
+            print(c(i, accept_track[i-1,]))
             if (i%%25 == 0) print(round(c(i,posterior[i,]),3))
             if (i%%10 == 0) 
             {
                   print("Average accept rate:")
                   print(apply(accept_track[1:i,],2,mean))
-                  print("Trailing 50 accept rate:")
-                  print(apply(accept_track[max(1, i-49):i,],2,mean))
+                  print("Trailing 20 accept rate:")
+                  print(apply(accept_track[max(1, i-19):i,],2,mean))
             }
 
             # sample mu by block
-            if (accept_track[i-1,2]==1 | mean(accept_track[max(1, i-20):(i-1),1]) < 0.05)
+            if (accept_track[i-1,2]==1 | mean(accept_track[max(1, i-5):(i-1),1]) < 0.05)
             {# sample new phis only if pis have been up updated or mu have not been updated for 20 iteration
                   Phis.givenPi = xsample( E = PiMat, F = pi.candidate[-1]/pi.candidate[1], G = diag(rep(1,J1)), H = rep(0,J1),
-                           iter = 2^K, burnin = 10, type = prosalMethod, test=FALSE)
+                           iter = 2^(K+1), burnin = 10, type = prosalMethod, test=FALSE)
                   mu.sample = MuMat%*%t(Phis.givenPi$X)*pi.candidate[1]  
             }
             # else use mu.sample from last iteration
-            mu.candidate = mu.sample[,sample(1:2^K,1)]
+            mu.candidate = mu.sample[,sample(1:2^(K+1),1)]
             
             log.alpha = density.YMuPi(K=K, y=y, mu=mu.candidate,pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
                                       logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix) -
@@ -994,9 +994,9 @@ post.mu.pi.ByBlock = function(K, mu.init=NULL, pi.init, iter, inner.iter, burnin
             {
                   
                   Phis.givenMu = xsample( E = rbind(rep(1,2^K-1),MuMat), F = c(1-pi0.candidate,posterior[i,1:K])/pi0.candidate, G = diag(rep(1,J1)), H = rep(0,J1),
-                                  iter = 2^K, burnin = 10, type = prosalMethod, test=FALSE )
+                                  iter = 2^(K+1), burnin = 10, type = prosalMethod, test=FALSE )
                   pi.sample = PiMat%*%t(Phis.givenMu$X)*pi0.candidate
-                  pi.candidate = c(pi0.candidate, pi.sample[,sample(1:2^K,1)])
+                  pi.candidate = c(pi0.candidate, pi.sample[,sample(1:2^(K+1),1)])
                   
                   log.alpha = density.YMuPi(K=K, y=y, mu=mu.candidate,pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
                                             logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix) -
