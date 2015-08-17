@@ -1146,7 +1146,8 @@ post.mu.pi.ByBlock.v2 = function(K, mu.init=NULL, pi.init, iter, inner.iter, bur
 
 # use random walk on both pi and mu with fixed constrains
 post.mu.pi.ByBlock.v3 = function(K, mu.init=NULL, pi.init, iter, inner.iter, burnin, inner.burnin, dat, 
-      MH.sigmaOfpi0=0.1, MH.sigmaOfmu=rep(1,K-1), ParMatrix, prior.alpha, densityMethod = "mirror")
+      MH.sigmaOfpi0=0.1, MH.sigmaOfpi.rest=rep(0.3,K-2), MH.sigmaOfmu=rep(1,K-1), ParMatrix, prior.alpha, 
+      densityMethod = "mirror")
 {
       y = BitoMulti(dat=dat,K=K)
       posterior = matrix(NA, nrow=iter, ncol=2*K+1)
@@ -1222,13 +1223,24 @@ post.mu.pi.ByBlock.v3 = function(K, mu.init=NULL, pi.init, iter, inner.iter, bur
             }
             else
             {
-                  
-                  pi.candidate = c(pi0.candidate, pi.sample[,sample(1:2^(K+1),1)])
-                  
-                  log.alpha = density.YMuPi(K=K, y=y, mu=mu.candidate,pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+                  pi1tok_2 = inv.logit(logit(posterior[i-1,(K+2):(2*K-1)]) + rnorm(K-2, 0, MH.sigmaOfpi.rest))
+                  b=numeric()
+                  b[1] = 1 - pi0.candidate - sum(pi1tok_2)
+                  b[2] = sum(mu.candidate) - crossprod(1:(K-2), pi1tok_2)
+                  matA = matrix(c(1, K-1, 1, K), nrow=2)
+                  pi.rest = solve(matA,b)
+
+                  pi.candidate = c(pi0.candidate, pi1tok_2, pi.rest)
+
+                  if (pi.rest[1]>0 & pi.rest[2]>0 & pi.rest[1]<1 & pi.rest[2]<1))
+                  {
+                        log.alpha = density.YMuPi(K=K, y=y, mu=mu.candidate,pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
                                             logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix) -
                         density.YMuPi(K=K, y=y, mu=mu.candidate,pi=posterior[i,(K+1):(2*K+1)], SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
                                       logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix)
+                  } else {
+                        log.alpha = -Inf
+                  }
                   alpha_track[i,2] = exp(log.alpha)
                   ratio = min(1,alpha_track[i,2])
                   u = runif(1)
