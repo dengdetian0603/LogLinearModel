@@ -1232,7 +1232,7 @@ post.mu.pi.ByBlock.v3 = function(K, mu.init=NULL, pi.init, iter, inner.iter, bur
 
                   pi.candidate = c(pi0.candidate, pi1tok_2, pi.rest)
 
-                  if (pi.rest[1]>0 & pi.rest[2]>0 & pi.rest[1]<1 & pi.rest[2]<1))
+                  if (pi.rest[1]>0 & pi.rest[2]>0 & pi.rest[1]<1 & pi.rest[2]<1)
                   {
                         log.alpha = density.YMuPi(K=K, y=y, mu=mu.candidate,pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
                                             logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix) -
