@@ -930,7 +930,7 @@ post.mu.pi.ByBlock = function(K, mu.init=NULL, pi.init, iter, inner.iter, burnin
       MH.sigmaOfpi0, ParMatrix, prior.alpha, prosalMethod = "mirror", densityMethod = "mirror")
 {
       y = BitoMulti(dat=dat,K=K)
-      posterior = matrix(NA, nrow=iter, ncol=2*K+1)
+      posterior = matrix(NA, nrow=iter+burnin, ncol=2*K+1)
       posterior[1,(K+1):(2*K+1)] = pi.init
       PiMat = ParMatrix$PiMat
       MuMat = ParMatrix$MuMat
@@ -945,7 +945,7 @@ post.mu.pi.ByBlock = function(K, mu.init=NULL, pi.init, iter, inner.iter, burnin
       # beta0.mat = matrix(NA, nrow=iter, ncol=K)
       # beta0.mat[1,] = log(posterior[1,1:K]/(1-posterior[1,1:K]))
       
-      accept_track = matrix(0, nrow=iter, ncol=2)
+      accept_track = matrix(0, nrow=iter+burnin, ncol=2)
       accept_track[1,] = rep(1, 2)
       alpha_track = accept_track
       
@@ -1040,7 +1040,7 @@ post.mu.pi.ByBlock.v2 = function(K, mu.init=NULL, pi.init, iter, inner.iter, bur
       MH.sigmaOfpi0=0.1, MH.sigmaOfmu=rep(1,K-1), ParMatrix, prior.alpha, prosalMethod = "mirror", densityMethod = "mirror")
 {
       y = BitoMulti(dat=dat,K=K)
-      posterior = matrix(NA, nrow=iter, ncol=2*K+1)
+      posterior = matrix(NA, nrow=iter+burnin, ncol=2*K+1)
       posterior[1,(K+1):(2*K+1)] = pi.init
       PiMat = ParMatrix$PiMat
       MuMat = ParMatrix$MuMat
@@ -1055,7 +1055,7 @@ post.mu.pi.ByBlock.v2 = function(K, mu.init=NULL, pi.init, iter, inner.iter, bur
       # beta0.mat = matrix(NA, nrow=iter, ncol=K)
       # beta0.mat[1,] = log(posterior[1,1:K]/(1-posterior[1,1:K]))
       
-      accept_track = matrix(0, nrow=iter, ncol=2)
+      accept_track = matrix(0, nrow=iter+burnin, ncol=2)
       accept_track[1,] = rep(1, 2)
       alpha_track = accept_track
       
@@ -1150,7 +1150,7 @@ post.mu.pi.ByBlock.v3 = function(K, mu.init=NULL, pi.init, iter, inner.iter, bur
       densityMethod = "mirror")
 {
       y = BitoMulti(dat=dat,K=K)
-      posterior = matrix(NA, nrow=iter, ncol=2*K+1)
+      posterior = matrix(NA, nrow=iter+burnin, ncol=2*K+1)
       posterior[1,(K+1):(2*K+1)] = pi.init
       PiMat = ParMatrix$PiMat
       MuMat = ParMatrix$MuMat
@@ -1165,7 +1165,7 @@ post.mu.pi.ByBlock.v3 = function(K, mu.init=NULL, pi.init, iter, inner.iter, bur
       # beta0.mat = matrix(NA, nrow=iter, ncol=K)
       # beta0.mat[1,] = log(posterior[1,1:K]/(1-posterior[1,1:K]))
       
-      accept_track = matrix(0, nrow=iter, ncol=2)
+      accept_track = matrix(0, nrow=iter+burnin, ncol=2)
       accept_track[1,] = rep(1, 2)
       alpha_track = accept_track
       
@@ -1178,7 +1178,12 @@ post.mu.pi.ByBlock.v3 = function(K, mu.init=NULL, pi.init, iter, inner.iter, bur
             posterior[i,1:K] = mu.candidate
             posterior[i,(K+1):(2*K+1)] = pi.candidate
             print(c(i, accept_track[i-1,]))
-            if (i%%25 == 0) print(round(c(i,posterior[i,]),3))
+            if (i%%25 == 0) 
+            {
+                  print(round(posterior[i,],3))
+                  print("Trailing 200 sample mean:")
+                  print(round(apply(posterior[max(1, i-199):i,],2,mean),3))
+            }
             if (i%%10 == 0) 
             {
                   print("Average accept rate:")
@@ -1369,3 +1374,159 @@ density.MgivenMuPi.plural = function(K, Mmat=NULL, mu, pi, logscale=FALSE, burni
       }
 }
 
+## Sampler with larger sum set to have prob 0, with measurement error
+# use random walk on both pi and mu with fixed constrains
+############## TODO: ##########################
+GenMatrices.sparse = function(K, upto)
+{
+      L.all = as.matrix(AllComb(K))[-1,]
+      S = apply(L.all,1,sum)
+      index = order(S)
+      L.all = L.all[index,]
+      S = S[index]
+      J1 = length(S)
+      
+      #-- expand all possible combinations
+      L.all.exp = foreach(i=1:nrow(L.all), .combine=rbind) %dopar% {
+            expandL.LL(L.all[i,])
+      }
+      
+      MuMat = matrix(NA,nrow=K,ncol=J1)
+      for (i in 1:K)
+      {
+            MuMat[i,] = as.numeric(L.all.exp[,i]==1)
+      }
+      
+      PiMat = matrix(NA,nrow=K,ncol=J1)
+      for (i in 1:K)
+      {
+            PiMat[i,] = as.numeric(S==i)
+      }
+      return(list(MuMat=MuMat, PiMat=PiMat, J1=J1, Lmatrix = L.all.exp))
+}
+
+
+
+
+post.mu.pi.MeaErr.sparse = function(K, mu.init=NULL, pi.init, iter, inner.iter, burnin, inner.burnin, dat, 
+      MH.sigmaOfpi0=0.1, MH.sigmaOfpi.rest=rep(0.3,K-2), MH.sigmaOfmu=rep(1,K-1), ParMatrix, prior.alpha, 
+      densityMethod = "mirror")
+{
+      y = BitoMulti(dat=dat,K=K)
+      posterior = matrix(NA, nrow=iter, ncol=2*K+1)
+      posterior[1,(K+1):(2*K+1)] = pi.init
+      ################ TODO : ###################
+      PiMat = ParMatrix$PiMat
+      MuMat = ParMatrix$MuMat
+      J1 = ParMatrix$J1
+      
+      # Initialize
+      tmp = xsample( E = PiMat, F = pi.init[-1]/pi.init[1], G = diag(rep(1,J1)), H = rep(0,J1),
+                     iter = 10, burnin = 5, type = "cda", test=FALSE)
+      mu.sample = MuMat%*%t(tmp$X)*pi.init[1]  
+      posterior[1,1:K] = mu.sample[,2] # TODO: random init?
+      
+      # beta0.mat = matrix(NA, nrow=iter, ncol=K)
+      # beta0.mat[1,] = log(posterior[1,1:K]/(1-posterior[1,1:K]))
+      
+      accept_track = matrix(0, nrow=iter, ncol=2)
+      accept_track[1,] = rep(1, 2)
+      alpha_track = accept_track
+      
+      mu.candidate = posterior[1,1:K]
+      pi.candidate = posterior[1,(K+1):(2*K+1)]
+      message("Start block M-H sampling...")
+
+      for (i in 2:(iter+burnin))
+      {
+            posterior[i,1:K] = mu.candidate
+            posterior[i,(K+1):(2*K+1)] = pi.candidate
+            print(c(i, accept_track[i-1,]))
+            if (i%%25 == 0) 
+            {
+                  print(round(posterior[i,],3))
+                  print("Trailing 200 sample mean:")
+                  print(round(apply(posterior[max(1, i-199):i,],2,mean),3))
+            }
+            if (i%%10 == 0) 
+            {
+                  print("Average accept rate:")
+                  print(apply(accept_track[1:i,],2,mean))
+                  print("Trailing 20 accept rate:")
+                  print(apply(accept_track[max(1, i-19):i,],2,mean))
+            }
+
+            # sample mu by block
+            mu.candidate[1:(K-1)] = inv.logit(logit(posterior[i-1,1:(K-1)]) + rnorm(K-1, 0, MH.sigmaOfmu))
+            mu.candidate[K] = crossprod(1:K, posterior[i-1,-(1:(K+1))]) - sum(mu.candidate[1:(K-1)])
+            
+            if (mu.candidate[K]>0 & mu.candidate[K]<1)
+            {
+                  log.alpha = density.YMuPi(K=K, y=y, mu=mu.candidate,pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+                                      logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix) -
+                        density.YMuPi(K=K, y=y, mu=posterior[i,1:K],pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+                                logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix)
+            } else {
+                  log.alpha = -Inf
+            }
+            alpha_track[i,1] = exp(log.alpha)
+            ratio = min(1,alpha_track[i,1])
+            u = runif(1)
+            if(u <= ratio) # accept
+            {
+                  posterior[i,1:K] = mu.candidate
+                  accept_track[i,1] = 1
+            }
+            else # reject
+            {
+                  mu.candidate = posterior[i,1:K] # reset candidate
+            }
+            #beta0.mat[i,] = log(posterior[i,1:K]/(1-posterior[i,1:K]))
+            # sample pi0
+
+            pi0.candidate = inv.logit(logit(posterior[i-1,K+1])+rnorm(1,0,MH.sigmaOfpi0))
+            if (pi0.candidate >= 1-max(mu.candidate) | pi0.candidate<=max(0, 1-sum(mu.candidate)))
+            {
+                  # reject
+                  pi.candidate = posterior[i,(K+1):(2*K+1)]
+            }
+            else
+            {
+                  pi1tok_2 = inv.logit(logit(posterior[i-1,(K+2):(2*K-1)]) + rnorm(K-2, 0, MH.sigmaOfpi.rest))
+                  b=numeric()
+                  b[1] = 1 - pi0.candidate - sum(pi1tok_2)
+                  b[2] = sum(mu.candidate) - crossprod(1:(K-2), pi1tok_2)
+                  matA = matrix(c(1, K-1, 1, K), nrow=2)
+                  pi.rest = solve(matA,b)
+
+                  pi.candidate = c(pi0.candidate, pi1tok_2, pi.rest)
+
+                  if (pi.rest[1]>0 & pi.rest[2]>0 & pi.rest[1]<1 & pi.rest[2]<1)
+                  {
+                        log.alpha = density.YMuPi(K=K, y=y, mu=mu.candidate,pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+                                            logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix) -
+                        density.YMuPi(K=K, y=y, mu=mu.candidate,pi=posterior[i,(K+1):(2*K+1)], SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+                                      logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix)
+                  } else {
+                        log.alpha = -Inf
+                  }
+                  alpha_track[i,2] = exp(log.alpha)
+                  ratio = min(1,alpha_track[i,2])
+                  u = runif(1)
+
+                  if(u <= ratio) # accept
+                  {
+                        posterior[i, (K+1):(2*K+1)] = pi.candidate
+                        accept_track[i,2] = 1
+                  }
+                  else # reject
+                  {
+                        pi.candidate = posterior[i,(K+1):(2*K+1)]
+                  }
+            }
+
+      }
+      colnames(posterior) = c(paste0("Mu_",1:K), paste0("Pi_",0:K))
+      list(posterior = posterior[-(1:burnin),], history.alpha = alpha_track[-(1:burnin),], 
+           history.accept = accept_track[-(1:burnin),])
+}
