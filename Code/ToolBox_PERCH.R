@@ -1207,7 +1207,8 @@ post.mu.pi.ByBlock.v3 = function(K, mu.init=NULL, pi.init, iter, inner.iter, bur
                   log.alpha = density.YMuPi(K=K, y=y, mu=mu.candidate,pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
                                       logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix) -
                         density.YMuPi(K=K, y=y, mu=posterior[i,1:K],pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
-                                logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix)
+                                logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix) + 
+                        sum(log(deriv.logit(posterior[i,1:(K-1)]))) - sum(log(deriv.logit(mu.candidate[-K])))
             } else {
                   log.alpha = -Inf
             }
@@ -1223,9 +1224,9 @@ post.mu.pi.ByBlock.v3 = function(K, mu.init=NULL, pi.init, iter, inner.iter, bur
             {
                   mu.candidate = posterior[i,1:K] # reset candidate
             }
+
             #beta0.mat[i,] = log(posterior[i,1:K]/(1-posterior[i,1:K]))
             # sample pi0
-
             pi0.candidate = inv.logit(logit(posterior[i-1,K+1])+rnorm(1,0,MH.sigmaOfpi0))
             if (pi0.candidate >= 1-max(mu.candidate) | pi0.candidate<=max(0, 1-sum(mu.candidate)))
             {
@@ -1248,7 +1249,8 @@ post.mu.pi.ByBlock.v3 = function(K, mu.init=NULL, pi.init, iter, inner.iter, bur
                         log.alpha = density.YMuPi(K=K, y=y, mu=mu.candidate,pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
                                             logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix) -
                         density.YMuPi(K=K, y=y, mu=mu.candidate,pi=posterior[i,(K+1):(2*K+1)], SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
-                                      logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix)
+                                      logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix) + 
+                        sum(log(deriv.logit(posterior[i,(K+1):(2*K-1)]))) - sum(log(deriv.logit(pi.candidate[1:(K-1)])))
                   } else {
                         log.alpha = -Inf
                   }
