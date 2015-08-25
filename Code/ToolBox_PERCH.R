@@ -13,6 +13,11 @@ inv.logit = function(x)
 	1/(1+exp(-x))
 }
 
+deriv.logit = function(x)
+{
+      1/x + 1/(1-x)
+}
+
 
 # function expands observed vector to feature space
 expandL.QE = function(l) 
@@ -1086,7 +1091,8 @@ post.mu.pi.ByBlock.v2 = function(K, mu.init=NULL, pi.init, iter, inner.iter, bur
            		log.alpha = density.YMuPi(K=K, y=y, mu=mu.candidate,pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
                                       logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix) -
                   	density.YMuPi(K=K, y=y, mu=posterior[i,1:K],pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
-                                logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix)
+                                logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix) + 
+                        sum(log(deriv.logit(posterior[i,1:(K-1)]))) - sum(log(deriv.logit(mu.candidate[-K])))
             } else {
             	log.alpha = -Inf
             }
