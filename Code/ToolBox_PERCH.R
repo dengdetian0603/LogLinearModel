@@ -832,7 +832,7 @@ density.YMuPi = function(K, dat, y=NULL, mu, pi, SigmaInPrior, AlphaInPrior, log
 ## posterior sampler with piror on mu (logitnormal) and pi (unifor(0, 1-max(mu)))
 # TODO!!!
 
-post.mu.pi = function(K, mu.init=NULL, pi.init, iter, inner.iter, burnin, inner.burnin, dat, MH.par=c(1,1,1,0.5), ParMatrix, prior.alpha)
+post.mu.pi0 = function(K, mu.init=NULL, pi.init, iter, inner.iter, burnin, inner.burnin, dat, MH.par=c(1,1,1,0.5), ParMatrix, prior.alpha)
 {
       y = BitoMulti(dat=dat,K=K)
       posterior = matrix(NA, nrow=iter, ncol=2*K+1)
@@ -1208,7 +1208,7 @@ post.mu.pi.ByBlock.v3 = function(K, mu.init=NULL, pi.init, iter, inner.iter, bur
                                       logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix) -
                         density.YMuPi(K=K, y=y, mu=posterior[i,1:K],pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
                                 logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix) + 
-                        sum(log(deriv.logit(posterior[i,1:(K-1)]))) - sum(log(deriv.logit(mu.candidate[-K])))
+                        sum(log(deriv.logit(posterior[i,1:K]))) - sum(log(deriv.logit(mu.candidate[1:K])))
             } else {
                   log.alpha = -Inf
             }
@@ -1250,7 +1250,7 @@ post.mu.pi.ByBlock.v3 = function(K, mu.init=NULL, pi.init, iter, inner.iter, bur
                                             logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix) -
                         density.YMuPi(K=K, y=y, mu=mu.candidate,pi=posterior[i,(K+1):(2*K+1)], SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
                                       logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix) + 
-                        sum(log(deriv.logit(posterior[i,(K+1):(2*K-1)]))) - sum(log(deriv.logit(pi.candidate[1:(K-1)])))
+                        sum(log(deriv.logit(posterior[i,(K+1):(2*K+1)]))) - sum(log(deriv.logit(pi.candidate[1:(K+1)])))
                   } else {
                         log.alpha = -Inf
                   }
