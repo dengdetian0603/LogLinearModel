@@ -1153,7 +1153,7 @@ post.mu.pi.ByBlock.v2 = function(K, mu.init=NULL, pi.init, iter, inner.iter, bur
 # use random walk on both pi and mu with fixed constrains
 post.mu.pi.ByBlock.v3 = function(K, mu.init=NULL, pi.init, iter, inner.iter, burnin, inner.burnin, dat, 
       MH.sigmaOfpi0=0.1, MH.sigmaOfpi.rest=rep(0.3,K-2), MH.sigmaOfmu=rep(1,K-1), ParMatrix, prior.alpha, 
-      densityMethod = "mirror")
+      densityMethod = "mirror", Ncore=detectCores())
 {
       y = BitoMulti(dat=dat,K=K)
       posterior = matrix(NA, nrow=iter+burnin, ncol=2*K+1)
@@ -1204,11 +1204,16 @@ post.mu.pi.ByBlock.v3 = function(K, mu.init=NULL, pi.init, iter, inner.iter, bur
             
             if (mu.candidate[K]>0 & mu.candidate[K]<1)
             {
-                  log.alpha = density.YMuPi(K=K, y=y, mu=mu.candidate,pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
-                                      logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter/2, method=densityMethod, ParMat=ParMatrix) -
-                        density.YMuPi(K=K, y=y, mu=posterior[i,1:K],pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
-                                logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter/2, method=densityMethod, ParMat=ParMatrix) + 
-                        sum(log(deriv.logit(posterior[i,1:K]))) - sum(log(deriv.logit(mu.candidate[1:K])))
+                  logJointDensity = foreach(lik = 1:Ncore, .combine=c) %dopar% {
+                        if (lik < Ncore/2 + 1){
+                              density.YMuPi(K=K, y=y, mu=mu.candidate,pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+                                      logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter/2, method=densityMethod, ParMat=ParMatrix)
+                              } else {
+                              density.YMuPi(K=K, y=y, mu=posterior[i,1:K],pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+                                logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter/2, method=densityMethod, ParMat=ParMatrix)      
+                              }
+                  }
+                  log.alpha = mean(logJointDensity[1:(Ncore/2)] - logJointDensity[(Ncore/2 + 1):Ncore]) + sum(log(deriv.logit(posterior[i,1:K]))) - sum(log(deriv.logit(mu.candidate[1:K])))
             } else {
                   log.alpha = -Inf
             }
@@ -1246,11 +1251,17 @@ post.mu.pi.ByBlock.v3 = function(K, mu.init=NULL, pi.init, iter, inner.iter, bur
 
                   if (pi.rest[1]>0 & pi.rest[2]>0 & pi.rest[1]<1 & pi.rest[2]<1)
                   {
-                        log.alpha = density.YMuPi(K=K, y=y, mu=mu.candidate,pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
-                                            logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix) -
-                        density.YMuPi(K=K, y=y, mu=mu.candidate,pi=posterior[i,(K+1):(2*K+1)], SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
-                                      logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix) + 
-                        sum(log(deriv.logit(posterior[i,(K+1):(2*K+1)]))) - sum(log(deriv.logit(pi.candidate[1:(K+1)])))
+                        logJointDensity2 = foreach(lik = 1:Ncore, .combine=c) %dopar% {
+                              if (lik < Ncore/2 + 1){
+                                    density.YMuPi(K=K, y=y, mu=mu.candidate,pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+                                            logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix)
+                                    } else {
+                                    density.YMuPi(K=K, y=y, mu=mu.candidate,pi=posterior[i,(K+1):(2*K+1)], SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+                                      logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix)      
+                                    }
+                        }
+
+                        log.alpha = mean(logJointDensity2[1:(Ncore/2)] - logJointDensity2[(Ncore/2 + 1):Ncore]) + sum(log(deriv.logit(posterior[i,(K+1):(2*K+1)]))) - sum(log(deriv.logit(pi.candidate[1:(K+1)])))
                   } else {
                         log.alpha = -Inf
                   }
