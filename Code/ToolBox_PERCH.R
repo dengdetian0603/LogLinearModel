@@ -807,10 +807,11 @@ density.YgivenMuPi = function(K, dat, y=NULL, mu, pis, logscale=FALSE, burnin=30
 prior.MuPi = function(mu, pis, Alpha, logscale=TRUE)
 {
       K = length(mu)
+      boundary1 = as.numeric(sum(mu) - crossprod(1:K, pis[-1]) < 1e-10)
       density.pi0toK = ddirichlet(x=pis, alpha=Alpha)
       q = 1 - pis[1]
       Q = crossprod(1:K, pis[-1])
-      density.mu = ((1/q)^K)/dIrwinHall(x=Q, K=K, q=q)*as.numeric(mu>0 && mu<q)
+      density.mu = ((1/q)^K)/dIrwinHall(x=Q, K=K, q=q)*as.numeric(mu>0 && mu<q)*boundary1
       if (logscale)
       {
             return(log(density.mu) + log(density.pi0toK))
