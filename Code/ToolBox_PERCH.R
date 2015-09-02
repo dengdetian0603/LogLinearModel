@@ -1,6 +1,7 @@
 library(limSolve)
 library(doMC)
 library(foreach)
+library(gtools)
 
 #--------------------- Design Matrix Preparation ------------------------------------------------------
 logit = function(x)
@@ -18,6 +19,15 @@ deriv.logit = function(x)
       1/x + 1/(1-x)
 }
 
+dIrwinHall = function(x, K, q)
+{
+	A = (-1)^(0:K)
+	B = choose(K, 0:K)
+	C = (x/q - 0:K)^(K-1)
+	D = sign(x - (0:K)*q)
+	fx = sum(A*B*C*D)/(2*q*factorial(K-1))
+	fx
+}
 
 # function expands observed vector to feature space
 expandL.QE = function(l) 
@@ -734,19 +744,19 @@ GenMatrices = function(K)
       return(list(MuMat=MuMat, PiMat=PiMat, J1=J1, Lmatrix = L.all.exp))
 }
 
-rPhiGivenPiMu.LL = function(K, mu, pi, burnin=30, n=10, method="cda", pars)
+rPhiGivenPiMu.LL = function(K, mu, pis, burnin=30, n=10, method="cda", pars)
 {
       # TODO: number of iter and output should be adaptive according to K
-      Phis = tryCatch(xsample( E = rbind(pars$PiMat,pars$MuMat), F = c(pi[-1],mu)/pi[1], G = diag(rep(1,pars$J1)), H = rep(0,pars$J1),
+      Phis = tryCatch(xsample( E = rbind(pars$PiMat,pars$MuMat), F = c(pis[-1],mu)/pis[1], G = diag(rep(1,pars$J1)), H = rep(0,pars$J1),
                       iter = n, burnin = burnin, type = method, test=FALSE), error = function(e) "Incompatible constraints.")
       if (is.character(Phis)) return(NA)
-      else return( tryCatch(Phis$X[-1,], error=function(e){ print(e); print("pi:");print(pi);print("mu:"); print(mu); return(NA)}))
+      else return( tryCatch(Phis$X[-1,], error=function(e){ print(e); print("pi:");print(pis);print("mu:"); print(mu); return(NA)}))
 }
 
 # Monte Carlo estimate of P[y|mu,pi]
-density.YgivenMuPi = function(K, dat, y=NULL, mu, pi, logscale=FALSE, burnin=300, n=100, method="cda", parMat)
+density.YgivenMuPi = function(K, dat, y=NULL, mu, pis, logscale=FALSE, burnin=300, n=100, method="cda", parMat)
 {
-      phis = suppressWarnings(rPhiGivenPiMu.LL(K=K, mu=mu, pi=pi, burnin=burnin, n=n, method=method, pars=parMat))
+      phis = suppressWarnings(rPhiGivenPiMu.LL(K=K, mu=mu, pis=pis, burnin=burnin, n=n, method=method, pars=parMat))
       if (length(phis)<=1) 
       {
             warning("Incompatible Mu,Pi value, density value is considered 0.")
@@ -776,22 +786,43 @@ density.YgivenMuPi = function(K, dat, y=NULL, mu, pi, logscale=FALSE, burnin=300
 
 # density of the prior p[mu, pi]
 ## model 1: [mu] ~ logit.normal(0, Sigma),  [pi0|mu] ~ unif(0, 1-max(mu)), (pi1,..,piK) ~ Stick Breaking 
-prior.MuPi = function(mu, pi, Sigma, Alpha, logscale=FALSE)
+# prior.MuPi = function(mu, pi, Sigma, Alpha, logscale=FALSE)
+# {
+#       K = length(mu)
+#       beta = log(mu/(1-mu))
+#       density.mu = dmvnorm(x=beta, mean=rep(0,K), sigma=diag(Sigma), log=logscale)
+#       density.pi0 = 1/(1-max(mu))
+#       density.pi1toK = dStickBreak(sticks = pi[-1]/(1-pi[1]), Alpha, logscale)
+#       if (logscale)
+#       {
+#             return(density.mu + log(density.pi0) + density.pi1toK)
+#       }
+#       else
+#       {
+#             return(density.mu*density.pi0*density.pi1toK)
+#       }
+# }
+
+## model 2: 
+prior.MuPi = function(mu, pis, Alpha, logscale=TRUE)
 {
       K = length(mu)
-      beta = log(mu/(1-mu))
-      density.mu = dmvnorm(x=beta, mean=rep(0,K), sigma=diag(Sigma), log=logscale)
-      density.pi0 = 1/(1-max(mu))
-      density.pi1toK = dStickBreak(sticks = pi[-1]/(1-pi[1]), Alpha, logscale)
+      density.pi0toK = ddirichlet(x=pis, alpha=Alpha)
+      q = 1 - pis[1]
+      Q = crossprod(1:K, pis[-1])
+      density.mu = ((1/q)^K)/dIrwinHall(x=Q, K=K, q=q)*as.numeric(mu>0 && mu<q)
       if (logscale)
       {
-            return(density.mu + log(density.pi0) + density.pi1toK)
+            return(log(density.mu) + log(density.pi0toK))
       }
       else
       {
-            return(density.mu*density.pi0*density.pi1toK)
+            
+            return(density.mu*density.pi0toK)
       }
 }
+
+
 
 rStickBreak = function(num_weights, alpha) 
 {
@@ -811,14 +842,14 @@ dStickBreak = function(sticks, alpha, logscale=FALSE)
 }
 
 # joint density of p[y, mu, pi]
-density.YMuPi = function(K, dat, y=NULL, mu, pi, SigmaInPrior, AlphaInPrior, logscale=FALSE, inner.burnin, inner.iter, method="cda", ParMat)
+density.YMuPi = function(K, dat, y=NULL, mu, pis, SigmaInPrior, AlphaInPrior, logscale=FALSE, inner.burnin, inner.iter, method="cda", ParMat)
 {
       if (length(y)<1)
       {
             y = BitoMulti(dat=dat,K=K)
       }
-      f1 = density.YgivenMuPi(K=K, y=y, mu=mu, pi=pi, logscale=logscale, burnin=inner.burnin, n=inner.iter, method=method, parMat=ParMat)
-      f2 = prior.MuPi(mu=mu, pi=pi, Sigma=SigmaInPrior, Alpha=AlphaInPrior, logscale=logscale)
+      f1 = density.YgivenMuPi(K=K, y=y, mu=mu, pis=pis, logscale=logscale, burnin=inner.burnin, n=inner.iter, method=method, parMat=ParMat)
+      f2 = prior.MuPi(mu=mu, pis=pis, Alpha=AlphaInPrior, logscale=logscale)
       if (logscale)
       {
             return(f1+f2)
@@ -982,9 +1013,9 @@ post.mu.pi.ByBlock = function(K, mu.init=NULL, pi.init, iter, inner.iter, burnin
             # else use mu.sample from last iteration
             mu.candidate = mu.sample[,sample(1:2^(K+1),1)]
             
-            log.alpha = density.YMuPi(K=K, y=y, mu=mu.candidate,pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+            log.alpha = density.YMuPi(K=K, y=y, mu=mu.candidate,pis=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
                                       logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix) -
-                  density.YMuPi(K=K, y=y, mu=posterior[i,1:K],pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+                  density.YMuPi(K=K, y=y, mu=posterior[i,1:K],pis=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
                                 logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix)
             alpha_track[i,1] = exp(log.alpha)
             ratio = min(1,alpha_track[i,1])
@@ -1015,9 +1046,9 @@ post.mu.pi.ByBlock = function(K, mu.init=NULL, pi.init, iter, inner.iter, burnin
                   pi.sample = PiMat%*%t(Phis.givenMu$X)*pi0.candidate
                   pi.candidate = c(pi0.candidate, pi.sample[,sample(1:2^(K+1),1)])
                   
-                  log.alpha = density.YMuPi(K=K, y=y, mu=mu.candidate,pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+                  log.alpha = density.YMuPi(K=K, y=y, mu=mu.candidate,pis=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
                                             logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix) -
-                        density.YMuPi(K=K, y=y, mu=mu.candidate,pi=posterior[i,(K+1):(2*K+1)], SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+                        density.YMuPi(K=K, y=y, mu=mu.candidate,pis=posterior[i,(K+1):(2*K+1)], SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
                                       logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix)
                   alpha_track[i,2] = exp(log.alpha)
                   ratio = min(1,alpha_track[i,2])
@@ -1088,9 +1119,9 @@ post.mu.pi.ByBlock.v2 = function(K, mu.init=NULL, pi.init, iter, inner.iter, bur
             
             if (mu.candidate[K]>0 & mu.candidate[K]<1)
             {
-           		log.alpha = density.YMuPi(K=K, y=y, mu=mu.candidate,pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+           		log.alpha = density.YMuPi(K=K, y=y, mu=mu.candidate,pis=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
                                       logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix) -
-                  	density.YMuPi(K=K, y=y, mu=posterior[i,1:K],pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+                  	density.YMuPi(K=K, y=y, mu=posterior[i,1:K],pis=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
                                 logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix) + 
                         sum(log(deriv.logit(posterior[i,1:(K-1)]))) - sum(log(deriv.logit(mu.candidate[-K])))
             } else {
@@ -1125,9 +1156,9 @@ post.mu.pi.ByBlock.v2 = function(K, mu.init=NULL, pi.init, iter, inner.iter, bur
                   pi.sample = PiMat%*%t(Phis.givenMu$X)*pi0.candidate
                   pi.candidate = c(pi0.candidate, pi.sample[,sample(1:2^(K+1),1)])
                   
-                  log.alpha = density.YMuPi(K=K, y=y, mu=mu.candidate,pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+                  log.alpha = density.YMuPi(K=K, y=y, mu=mu.candidate,pis=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
                                             logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix) -
-                        density.YMuPi(K=K, y=y, mu=mu.candidate,pi=posterior[i,(K+1):(2*K+1)], SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+                        density.YMuPi(K=K, y=y, mu=mu.candidate,pis=posterior[i,(K+1):(2*K+1)], SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
                                       logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix)
                   alpha_track[i,2] = exp(log.alpha)
                   ratio = min(1,alpha_track[i,2])
@@ -1206,10 +1237,10 @@ post.mu.pi.ByBlock.v3 = function(K, mu.init=NULL, pi.init, iter, inner.iter, bur
             {
                   logJointDensity = foreach(lik = 1:Ncore, .combine=c) %dopar% {
                         if (lik < Ncore/2 + 1){
-                              density.YMuPi(K=K, y=y, mu=mu.candidate,pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+                              density.YMuPi(K=K, y=y, mu=mu.candidate,pis=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
                                       logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter/2, method=densityMethod, ParMat=ParMatrix)
                               } else {
-                              density.YMuPi(K=K, y=y, mu=posterior[i,1:K],pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+                              density.YMuPi(K=K, y=y, mu=posterior[i,1:K],pis=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
                                 logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter/2, method=densityMethod, ParMat=ParMatrix)      
                               }
                   }
@@ -1253,10 +1284,10 @@ post.mu.pi.ByBlock.v3 = function(K, mu.init=NULL, pi.init, iter, inner.iter, bur
                   {
                         logJointDensity2 = foreach(lik = 1:Ncore, .combine=c) %dopar% {
                               if (lik < Ncore/2 + 1){
-                                    density.YMuPi(K=K, y=y, mu=mu.candidate,pi=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+                                    density.YMuPi(K=K, y=y, mu=mu.candidate,pis=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
                                             logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix)
                                     } else {
-                                    density.YMuPi(K=K, y=y, mu=mu.candidate,pi=posterior[i,(K+1):(2*K+1)], SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+                                    density.YMuPi(K=K, y=y, mu=mu.candidate,pis=posterior[i,(K+1):(2*K+1)], SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
                                       logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix)      
                                     }
                         }
