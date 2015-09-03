@@ -9,10 +9,10 @@ Acceptance Rate
 ```{r, echo=FALSE}
 load("~/Documents/workspace/Iter4500_dat_5.RData")
 tmp = Posterior
-apply(tmp$history.accept[3000:4000,],2,mean)
+apply(tmp$history.accept[6000:10000,],2,mean)
 
 library(coda)
-mc.chain = mcmc(tmp$posterior[3000:4000,])
+mc.chain = mcmc(tmp$posterior[6000:10000,],thin=1)
 plot(mc.chain)
 
 ```

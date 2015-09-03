@@ -10,6 +10,7 @@ pi1toK = sapply(pi0, function(x) {tmp=rStickBreak(K-1, Alpha);
 prior = cbind(mu,pi0,t(pi1toK))
 apply(prior[,-(1:K)],2,mean)
 
+
 layout(matrix(1:2,ncol=1))
 par(mar=c(2,4,1,1))
 plot(density(prior[,1],adjust=1.8), xlab="value of parameter", xlim=c(0,1),main="Posterior Density", ylim=c(0,7.5))
