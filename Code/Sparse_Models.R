@@ -216,7 +216,7 @@ post.mu.pi.Sparse.v1 = function(K, Smax, mu.init=NULL, pi.init, iter, inner.iter
                   }
                   #print(logJointDensity)
                   log.alpha = mean(logJointDensity[1:(Ncore/2)] - logJointDensity[(Ncore/2 + 1):Ncore]) + 
-                  sum(log(deriv.logit(posterior[i,1:K]))) - sum(log(deriv.logit(mu.candidate[1:K])))
+                  sum(log(deriv.logit(posterior[i,1:(K-1)]))) - sum(log(deriv.logit(mu.candidate[1:(K-1)])))
             } else {
                   log.alpha = -Inf
             }
@@ -269,7 +269,7 @@ post.mu.pi.Sparse.v1 = function(K, Smax, mu.init=NULL, pi.init, iter, inner.iter
                         #print(sum(log(deriv.logit(pi.candidate))))
                         #print(pi.candidate)
                         log.alpha = mean(logJointDensity2[1:(Ncore/2)] - logJointDensity2[(Ncore/2 + 1):Ncore]) + 
-                        sum(log(deriv.logit(posterior[i,(K+1):(Smax+K+1)]))) - sum(log(deriv.logit(pi.candidate)))
+                        sum(log(deriv.logit(posterior[i,(K+1):(Smax+K-1)]))) - sum(log(deriv.logit(pi.candidate[1:(Smax-1)])))
                   } else {
                         log.alpha = -Inf
                   }
