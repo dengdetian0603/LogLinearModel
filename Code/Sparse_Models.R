@@ -41,8 +41,9 @@ rPhiGivenPiMu.Sparse = function(K, Smax, mu, pis, burnin=30, n=10, method="cda",
 {
       # TODO: number of iter and output should be adaptive according to K
       pis = pis[1:(Smax+1)]
-      if (sum(pis)!=1)
+      if (abs(sum(pis)-1)>1e-9)
       {
+            print(sum(pis))
             message("pi vector is not Sparse.")
             return(NA)
       }
@@ -51,6 +52,9 @@ rPhiGivenPiMu.Sparse = function(K, Smax, mu, pis, burnin=30, n=10, method="cda",
       if (is.character(Phis)) return(NA)
       else return( tryCatch(Phis$X[-1,], error=function(e){ print(e); print("pi:");print(pis);print("mu:"); print(mu); return(NA)}))
 }
+
+#rPhiGivenPiMu.Sparse(K=5,Smax=3,mu=TrueMu.sparse, pis=TruePi.sparse, method="mirror",pars=Lmat)
+
 
 dMultinom.phi.Sparse = function(K, dat, y=NULL , phi, logscale=FALSE)
 {
@@ -112,7 +116,7 @@ prior.MuPi.Sparse = function(mu, pis, Alpha, Smax, logscale=TRUE)
       density.pi0toSmax = ddirichlet(x=pis, alpha=Alpha)
       q = 1 - pis[1]
       Q = crossprod(1:Smax, pis[-1])
-      boundary1 = as.numeric(sum(mu)-Q < 1e-9)
+      boundary1 = as.numeric(abs(sum(mu)-Q) < 1e-9)
       density.mu = ((1/q)^K)/dIrwinHall(x=Q, K=K, q=q)*as.numeric(mu>0 && mu<q)*boundary1
       if (logscale)
       {
@@ -197,7 +201,7 @@ post.mu.pi.Sparse.v1 = function(K, Smax, mu.init=NULL, pi.init, iter, inner.iter
 
             # sample mu by block
             mu.candidate[1:(K-1)] = inv.logit(logit(posterior[i-1,1:(K-1)]) + rnorm(K-1, 0, MH.sigmaOfmu))
-            mu.candidate[K] = crossprod(1:Smax, posterior[i-1,(K+1):(Smax+K+1)]) - sum(mu.candidate[1:(K-1)])
+            mu.candidate[K] = crossprod(1:Smax, posterior[i-1,(K+2):(Smax+K+1)]) - sum(mu.candidate[1:(K-1)])
             
             if (mu.candidate[K]>0 & mu.candidate[K]<1)
             {
@@ -238,28 +242,28 @@ post.mu.pi.Sparse.v1 = function(K, Smax, mu.init=NULL, pi.init, iter, inner.iter
             }
             else
             {
-                  pi1tok_2 = inv.logit(logit(posterior[i-1,(K+2):(2*K-1)]) + rnorm(K-2, 0, MH.sigmaOfpi.rest))
+                  pi1toSmax_2 = inv.logit(logit(posterior[i-1,(K+2):(K+Smax-1)]) + rnorm(Smax-2, 0, MH.sigmaOfpi.rest))
                   b=numeric()
-                  b[1] = 1 - pi0.candidate - sum(pi1tok_2)
-                  b[2] = sum(mu.candidate) - crossprod(1:(K-2), pi1tok_2)
-                  matA = matrix(c(1, K-1, 1, K), nrow=2)
+                  b[1] = 1 - pi0.candidate - sum(pi1toSmax_2)
+                  b[2] = sum(mu.candidate) - crossprod(1:(Smax-2), pi1toSmax_2)
+                  matA = matrix(c(1, Smax-1, 1, Smax), nrow=2)
                   pi.rest = solve(matA,b)
 
-                  pi.candidate = c(pi0.candidate, pi1tok_2, pi.rest)
+                  pi.candidate = c(pi0.candidate, pi1toSmax_2, pi.rest)
 
-                  if (pi.rest[1]>0 & pi.rest[2]>0 & pi.rest[1]<1 & pi.rest[2]<1)
+                  if (pi.rest>0 && pi.rest<1)
                   {
                         logJointDensity2 = foreach(lik = 1:Ncore, .combine=c) %dopar% {
                               if (lik < Ncore/2 + 1){
-                                    density.YMuPi(K=K, y=y, mu=mu.candidate,pis=pi.candidate, SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+                                    density.YMuPi.Sparse(K=K, Smax=Smax, y=y, mu=mu.candidate,pis=pi.candidate, AlphaInPrior=prior.alpha,
                                             logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix)
                                     } else {
-                                    density.YMuPi(K=K, y=y, mu=mu.candidate,pis=posterior[i,(K+1):(2*K+1)], SigmaInPrior=rep(1.6,K), AlphaInPrior=prior.alpha,
+                                    density.YMuPi.Sparse(K=K, Smax=Smax, y=y, mu=mu.candidate,pis=posterior[i,(K+1):(Smax+K+1)], AlphaInPrior=prior.alpha,
                                       logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix)      
                                     }
                         }
-
-                        log.alpha = mean(logJointDensity2[1:(Ncore/2)] - logJointDensity2[(Ncore/2 + 1):Ncore]) + sum(log(deriv.logit(posterior[i,(K+1):(2*K+1)]))) - sum(log(deriv.logit(pi.candidate[1:(K+1)])))
+                        log.alpha = mean(logJointDensity2[1:(Ncore/2)] - logJointDensity2[(Ncore/2 + 1):Ncore]) + 
+                        sum(log(deriv.logit(posterior[i,(K+1):(Smax+K+1)]))) - sum(log(deriv.logit(pi.candidate[1:(Smax+1)])))
                   } else {
                         log.alpha = -Inf
                   }
@@ -269,17 +273,17 @@ post.mu.pi.Sparse.v1 = function(K, Smax, mu.init=NULL, pi.init, iter, inner.iter
 
                   if(u <= ratio) # accept
                   {
-                        posterior[i, (K+1):(2*K+1)] = pi.candidate
+                        posterior[i, (K+1):(Smax+K+1)] = pi.candidate
                         accept_track[i,2] = 1
                   }
                   else # reject
                   {
-                        pi.candidate = posterior[i,(K+1):(2*K+1)]
+                        pi.candidate = posterior[i,(K+1):(Smax+K+1)]
                   }
             }
 
       }
-      colnames(posterior) = c(paste0("Mu_",1:K), paste0("Pi_",0:K))
+      colnames(posterior) = c(paste0("Mu_",1:K), paste0("Pi_",0:Smax))
       list(posterior = posterior[-(1:burnin),], history.alpha = alpha_track[-(1:burnin),], 
            history.accept = accept_track[-(1:burnin),])
 }
