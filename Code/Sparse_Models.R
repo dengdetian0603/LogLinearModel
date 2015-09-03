@@ -117,7 +117,7 @@ prior.MuPi.Sparse = function(mu, pis, Alpha, Smax, logscale=TRUE)
       q = 1 - pis[1]
       Q = crossprod(1:Smax, pis[-1])
       boundary1 = as.numeric(abs(sum(mu)-Q) < 1e-9)
-      density.mu = ((1/q)^K)/dIrwinHall(x=Q, K=K, q=q)*as.numeric(mu>0 && mu<q)*boundary1
+      density.mu = ((1/q)^K)/dIrwinHall(x=Q, K=K, q=q)*prod(mu>0 & mu<q)*boundary1
       if (logscale)
       {
             return(log(density.mu) + log(density.pi0toSmax))
@@ -214,13 +214,14 @@ post.mu.pi.Sparse.v1 = function(K, Smax, mu.init=NULL, pi.init, iter, inner.iter
                                 logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter/2, method=densityMethod, ParMat=ParMatrix)      
                               }
                   }
+                  #print(logJointDensity)
                   log.alpha = mean(logJointDensity[1:(Ncore/2)] - logJointDensity[(Ncore/2 + 1):Ncore]) + 
                   sum(log(deriv.logit(posterior[i,1:K]))) - sum(log(deriv.logit(mu.candidate[1:K])))
             } else {
                   log.alpha = -Inf
             }
             alpha_track[i,1] = exp(log.alpha)
-            ratio = min(1,alpha_track[i,1])
+            ratio = min(1,alpha_track[i,1]); #print(ratio)
             u = runif(1)
             if(u <= ratio) # accept
             {
@@ -251,7 +252,7 @@ post.mu.pi.Sparse.v1 = function(K, Smax, mu.init=NULL, pi.init, iter, inner.iter
 
                   pi.candidate = c(pi0.candidate, pi1toSmax_2, pi.rest)
 
-                  if (pi.rest>0 && pi.rest<1)
+                  if (prod(pi.rest>0 & pi.rest<1)>0)
                   {
                         logJointDensity2 = foreach(lik = 1:Ncore, .combine=c) %dopar% {
                               if (lik < Ncore/2 + 1){
@@ -262,13 +263,18 @@ post.mu.pi.Sparse.v1 = function(K, Smax, mu.init=NULL, pi.init, iter, inner.iter
                                       logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix)      
                                     }
                         }
+                        #print(logJointDensity2)
+                        #print(mean(logJointDensity2[1:(Ncore/2)] - logJointDensity2[(Ncore/2 + 1):Ncore]))
+                        #print(sum(log(deriv.logit(posterior[i,(K+1):(Smax+K+1)]))))
+                        #print(sum(log(deriv.logit(pi.candidate))))
+                        #print(pi.candidate)
                         log.alpha = mean(logJointDensity2[1:(Ncore/2)] - logJointDensity2[(Ncore/2 + 1):Ncore]) + 
-                        sum(log(deriv.logit(posterior[i,(K+1):(Smax+K+1)]))) - sum(log(deriv.logit(pi.candidate[1:(Smax+1)])))
+                        sum(log(deriv.logit(posterior[i,(K+1):(Smax+K+1)]))) - sum(log(deriv.logit(pi.candidate)))
                   } else {
                         log.alpha = -Inf
                   }
                   alpha_track[i,2] = exp(log.alpha)
-                  ratio = min(1,alpha_track[i,2])
+                  ratio = min(1,alpha_track[i,2]); #print(ratio)
                   u = runif(1)
 
                   if(u <= ratio) # accept
