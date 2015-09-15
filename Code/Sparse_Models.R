@@ -152,6 +152,7 @@ density.YMuPi.Sparse = function(K, Smax, dat, y=NULL, mu, pis, AlphaInPrior, log
 #    inner.burnin=50, inner.iter=2000, method="mirror", ParMat=Lmat_S)
 
 # -------------------------------------------------------------------------------------------------------------------------- #
+# Random Walk Proposal
 post.mu.pi.Sparse.v1 = function(K, Smax, mu.init=NULL, pi.init, iter, inner.iter, burnin, inner.burnin, dat, 
       MH.sigmaOfpi0=0.1, MH.sigmaOfpi.rest=rep(0.3, Smax-2), MH.sigmaOfmu=rep(1,K-1), ParMatrix, prior.alpha, 
       densityMethod = "mirror", Ncore=detectCores())
@@ -286,6 +287,141 @@ post.mu.pi.Sparse.v1 = function(K, Smax, mu.init=NULL, pi.init, iter, inner.iter
                   {
                         pi.candidate = posterior[i,(K+1):(Smax+K+1)]
                   }
+            }
+
+      }
+      colnames(posterior) = c(paste0("Mu_",1:K), paste0("Pi_",0:Smax))
+      list(posterior = posterior[-(1:burnin),], history.alpha = alpha_track[-(1:burnin),], 
+           history.accept = accept_track[-(1:burnin),])
+}
+
+# Uniform Proposal
+post.mu.pi.Sparse.v2 = function(K, Smax, mu.init=NULL, pi.init, iter, inner.iter, burnin, inner.burnin, dat, 
+      MH.sigmaOfpi0=0.1, MH.sigmaOfpi.rest=rep(0.3, Smax-2), MH.sigmaOfmu=rep(1,K-1), ParMatrix, prior.alpha, 
+      densityMethod = "mirror", Ncore=detectCores())
+{
+      y = BitoMulti(dat=dat,K=K)
+      posterior = matrix(NA, nrow=iter+burnin, ncol=K+Smax+1)
+      posterior[1,(K+1):(K+Smax+1)] = pi.init
+      PiMat = ParMatrix$PiMat
+      MuMat = ParMatrix$MuMat
+      J1 = ParMatrix$J1
+      
+      # Initialize
+      tmp = xsample( E = matrix(rep(1,K), nrow=1), F = crossprod(1:Smax, pi.init[-1]), G = rbind(diag(rep(1,K)) , 
+            diag(rep(-1, K))), H = c(rep(0,K),rep(pi.init[1]-1, K)), iter = 100, burnin = 50, type = "mirror")$X
+      mu.sample = tmp[sample(1:100,1),]
+      posterior[1,1:K] = mu.sample 
+
+      # beta0.mat = matrix(NA, nrow=iter, ncol=K)
+      # beta0.mat[1,] = log(posterior[1,1:K]/(1-posterior[1,1:K]))
+      
+      accept_track = matrix(0, nrow=iter+burnin, ncol=2)
+      accept_track[1,] = rep(1, 2)
+      alpha_track = accept_track
+      
+      mu.candidate = posterior[1,1:K]
+      pi.candidate = posterior[1,(K+1):(Smax+K+1)]
+      message("Start block M-H sampling...")
+
+      for (i in 2:(iter+burnin))
+      {
+            posterior[i,1:K] = mu.candidate
+            posterior[i,(K+1):(Smax+K+1)] = pi.candidate
+            print(c(i, accept_track[i-1,]))
+            if (i%%25 == 0) 
+            {
+                  print(round(posterior[i,],3))
+                  print("Trailing 200 sample mean:")
+                  print(round(apply(posterior[max(1, i-199):i,],2,mean),3))
+            }
+            if (i%%10 == 0) 
+            {
+                  print("Average accept rate:")
+                  print(apply(accept_track[1:i,],2,mean))
+                  print("Trailing 20 accept rate:")
+                  print(apply(accept_track[max(1, i-19):i,],2,mean))
+            }
+
+            # sample mu by block            
+            if (accept_track[i-1,2]>0.5 | mean(accept_track[max(1, i-5):(i-1),1]) < 0.05)
+            {
+            	mu.tmp = xsample( E = matrix(rep(1,K), nrow=1), F = crossprod(1:Smax, posterior[i-1,(K+2):(Smax+K+1)]), 
+            				G = rbind(diag(rep(1,K)), diag(rep(-1, K))), 
+            				H = c(rep(0,K),rep(posterior[i-1,(K+1)]-1, K)), 
+            				iter = 100, burnin = 50, type = "mirror")$X
+            }
+      	mu.candidate = mu.tmp[sample(2:100,1),]	
+
+		logJointDensity = foreach(lik = 1:Ncore, .combine=c) %dopar% {
+                        if (lik < Ncore/2 + 1){
+                              density.YMuPi.Sparse(K=K, Smax=Smax, y=y, mu=mu.candidate,pis=pi.candidate, AlphaInPrior=prior.alpha,
+                                      logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter/2, method=densityMethod, ParMat=ParMatrix)
+                        } else {
+                              density.YMuPi.Sparse(K=K, Smax=Smax, y=y, mu=posterior[i,1:K],pis=pi.candidate, AlphaInPrior=prior.alpha,
+                                      logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter/2, method=densityMethod, ParMat=ParMatrix)      
+                        }
+                  }
+            #print(logJointDensity)
+            log.alpha = mean(logJointDensity[1:(Ncore/2)] - logJointDensity[(Ncore/2 + 1):Ncore])
+ 
+            alpha_track[i,1] = exp(log.alpha)
+            ratio = min(1,alpha_track[i,1]); #print(ratio)
+            u = runif(1)
+            if(u <= ratio) # accept
+            {
+                  posterior[i,1:K] = mu.candidate
+                  accept_track[i,1] = 1
+            }
+            else # reject
+            {
+                  mu.candidate = posterior[i,1:K] # reset candidate
+            }
+
+            # sample pi0
+            pi.tmp = rdirichlet(1, alpha=prior.alpha)
+            pi0.candidate = pi.tmp[1] #runif(1, min = max(0, 1-sum(mu.candidate)), max = 1-max(mu.candidate))
+            pi1toSmax_2 = pi.tmp[2:(Smax-1)] # runif(Smax-2, min = 0, max = 1-pi0.candidate)
+            		  		         #inv.logit(logit(posterior[i-1,(K+2):(K+Smax-1)]) + rnorm(Smax-2, 0, MH.sigmaOfpi.rest))
+            b=numeric()
+            b[1] = 1 - pi0.candidate - sum(pi1toSmax_2)
+            b[2] = sum(mu.candidate) - crossprod(1:(Smax-2), pi1toSmax_2)
+            matA = matrix(c(1, Smax-1, 1, Smax), nrow=2)
+            pi.rest = solve(matA,b)
+
+            pi.candidate = c(pi0.candidate, pi1toSmax_2, pi.rest)
+
+            if (prod(pi.rest>0 & pi.rest<1)>0)
+            {
+            	logJointDensity2 = foreach(lik = 1:Ncore, .combine=c) %dopar% {
+            		if (lik < Ncore/2 + 1){
+            			density.YMuPi.Sparse(K=K, Smax=Smax, y=y, mu=mu.candidate,pis=pi.candidate, AlphaInPrior=prior.alpha,
+            				logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix)
+            		} else {
+            			density.YMuPi.Sparse(K=K, Smax=Smax, y=y, mu=mu.candidate,pis=posterior[i,(K+1):(Smax+K+1)], AlphaInPrior=prior.alpha,
+            				logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix)      
+            		}
+            	}
+                  #print(logJointDensity2)
+                  #print(mean(logJointDensity2[1:(Ncore/2)] - logJointDensity2[(Ncore/2 + 1):Ncore]))
+                  #print(sum(log(deriv.logit(posterior[i,(K+1):(Smax+K+1)]))))
+                  #print(sum(log(deriv.logit(pi.candidate))))
+                  #print(pi.candidate)
+                  log.alpha = mean(logJointDensity2[1:(Ncore/2)] - logJointDensity2[(Ncore/2 + 1):Ncore])
+                  
+            } else {
+                  log.alpha = -Inf
+            }
+            alpha_track[i,2] = exp(log.alpha)
+            ratio = min(1,alpha_track[i,2]); #print(ratio)
+            u = runif(1)
+
+            if(u <= ratio) # accept
+            {
+            	posterior[i, (K+1):(Smax+K+1)] = pi.candidate
+                 	accept_track[i,2] = 1
+            } else { # reject
+                  pi.candidate = posterior[i,(K+1):(Smax+K+1)]
             }
 
       }
