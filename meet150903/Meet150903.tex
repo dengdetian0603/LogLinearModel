@@ -95,32 +95,35 @@ If we allow some of the cell probabilities to be exactly 0, then the model viola
 In the etiology study, scientists have strong beliefs that there cannot be too many (like more than 3) pathogens that jointly cause the disease. In other words, for some fixed integer $1\leq S_{max} \leq K$, P($S > S_{max}$) = 0. And we can make use of this belief by taking it into the specification of prior and likelihood function.
   
 
-\section{Joint Density}
-\subsection{Prior on $(\mu, \pi)$}
+\section{Model without Measurement Error}
+The posterior density $P(\mu, \pi | L)$ is proportional to the joint density $P(\mu, \pi, L) = P(L | \mu, \pi)P(\mu,\pi)$. We can sample from the posterior distribution by Metropolis-Hastings Algorithm as long as we define the likelihood and prior properly. 
+\subsection{The Prior $P(\mu, \pi)$}
+\[P(\mu,\pi) =  P(\pi) P(\mu | \pi)\]
+$P(\pi) = P(\pi; \alpha)$, where $(\pi_{Smax+1}, \ldots, \pi_K)=0$ and $(\pi_0,\ldots, \pi_{S_{max}}) \sim$ Dirichlet$(\alpha)$. \\
+$P(\mu | \pi)$ is a uniform distribution for $\mu$ in $(0,1-\pi_0)^K$ subject to the linear constrain:
+\[ \sum_{k=1}^K \mu_k = \sum_{k=1}^{S_{max}} k\pi_{k}\]
+Since we know that the sum of independent standard uniform random variable follows Irwin-Hall distribution, it can be shown that this conditional density has a closed form as follow, where $q = 1-\pi_0$ and $Q=\sum_{k=1}^{S_{max}} k\pi_{k}$
+\[ P(\mu | \pi) = q^K \Big \{\frac{1}{2q(K-1)!} \sum_{k=0}^K (-1)^k {K \choose k} (Q/q-k)^{K-1} \text{sign}(Q-kq) \Big \}^{-1} \]
+Therefore, $\alpha$ controls the informative part of the prior on $\pi$ and a conditional non-informative prior is set on $\mu$. For example, with $K=5, S_{max}=3, \alpha=(1,4,2,1)$, the prior marginal density of $(\mu, \pi)$ is shown in Fig \ref{prior}
+
+\begin{center}
+\includegraphics[scale=0.5]{dirich_uniform_prior.pdf}
+\captionof{figure}{Prior marginal density plot }
+\label{prior}
+\end{center}
 
 
-Then the posterior distribution of $(\mu, \pi)$ given data $L$ becomes:
-\begin{align*}
-P(\mu, \pi |L) \propto & P(L, \mu, \pi) \\
-= & P(L | \mu, \pi) P(\mu, \pi) \\
-= & \int P(L, \phi | \mu, \pi) d \phi P(\mu, \pi) \\
-\propto & \int P(L | \phi) P(\phi | \mu,\pi) d \phi P(\mu, \pi) \\
-\approx & \sum P(L | \phi_h) P(\pi | \mu) P(\mu)
-\end{align*}
-where $P(L | \phi_h)$ is the log linear model density evaluated at $\phi_h$, which is sampled uniformly from the feasible region subject to constrains (5-7).\\
-$P(\mu)$ is a multivariate logit Normal density with mean $0$ and standard deviation $\Sigma$.\\
-$P(\pi | \mu) = P(\pi_0 | \mu)P(\pi_1,.., \pi_K |\pi_0, \alpha)$, where $P(\pi_0 | \mu)$ is a uniform density on $(0, 1-\max(\mu))$ and $P(\pi_1,..\pi_K |\pi_0, \alpha)$ is a Stick Breaking prior with shape parameter $\alpha$ on $(0, 1-\pi_0)$.
+\subsection{The Likelihood $P(L|\mu, \pi)$}
+\begin{align}
+P(L | \mu, \pi) \nonumber \\ 
+= & \int P(L, \phi | \mu, \pi) d \phi \nonumber \\ 
+= & \int P(L | \phi, \mu, \pi) P(\phi | \mu,\pi) d \phi \nonumber \\ 
+= & \int P(L | \phi) P(\phi | \mu,\pi) d \phi \nonumber \\ 
+\approx & \frac{1}{H}\sum P(L | \phi_h) 
+\end{align}
+where $P(L | \phi_h)$ is the multinomial density of $L$ evaluated at $\phi_h$, which is sampled uniformly from the feasible region subject to constrains (5-7) with sample size $H$. \\
 
-
-%\subsubsection{QE model}
-%For QE model, $\tilde{L}$ is a $J_1\times J_2$, where $J_1 = 2^K-1, J_2 = \frac{1}{2}K(K+1)$.  Let $\theta = (\theta^{(1)},\theta^{(2)})$, we have a over-determined linear system after sampling $\vec{\phi}$: ($J_1$ equations with $J_2$ unknowns)
-%\[\tilde{L}\theta = \log \vec{\phi}\]
-%In this case, we can first find $\Theta$ as in last section and then solve the constrained Least Square problem to get the QE parameter estimates $\theta$:
-%\begin{align*}
-%\text{minimize } & ||\theta - \Theta||^2_2 \\
-%\text{subject to } & B e^{\tilde{L}\theta} =  \vec{\pi}/\pi(0)\\ 
-%\text{and } & C e^{\tilde{L}\theta} =  \vec{\mu}/\pi(0)
-%\end{align*} 
+In fact, according to the prior specification, $(\pi_{Smax+1}, \ldots, \pi_K)=0$ then all corresponding $\phi_j$s are fixed at $0$ as well, thus only a small fraction of $\phi$ is actually sampled, that is, the dimension of $\phi$ shrinks from $J_1 = 2^K-1$ to $J_2={K \choose 1} + \ldots + {K \choose S_{max}}$.\\
 
 \newpage
 
@@ -173,10 +176,8 @@ C \phi = & \mu/\pi_0
 \end{algorithmic}
 \end{algorithm}
 
-
-
 \newpage
-\subsection{Measurement Error Model}
+\section{Model with Measurement Error}
 Let $M$ be the observed measurement, and $L$ be the latent true state, with $\gamma$ and $\delta$ representing the TPR and FPR.
 \begin{align*}
 P(\mu, \pi , \gamma, \delta|M) \propto & P(M, \mu, \pi, \gamma, \delta) \\
@@ -184,7 +185,7 @@ P(\mu, \pi , \gamma, \delta|M) \propto & P(M, \mu, \pi, \gamma, \delta) \\
 = & \sum_{L \in \mathbb{L}}  P(M, L | \mu, \pi, \gamma, \delta) P(\mu, \pi, \gamma, \delta) \\ 
 = & \sum_{L \in \mathbb{L}} \big[ P(M | L, \gamma, \delta) P(L | \mu, \pi) \big ] P(\mu, \pi) P(\gamma) P(\delta) \\ 
 \end{align*}
-where 
+where $\mathbb{L}$ is the set of all possible and allowed values of L, and
 \begin{align*}
  P(M | L, \gamma, \delta) = & \prod_{k=1}^K P(M_k | L_k, \gamma, \delta) \text{\ \ (conditional independence assumption)}\\
  = & \prod_{k=1}^K (\gamma^{L_k} \delta^{1-L_k})^{M_k} [(1-\gamma)^{L_k} (1-\delta)^{1-L_k}]^{1-M_k}
@@ -192,7 +193,7 @@ where
 $P(\gamma)$ and $ P(\delta)$ are beta priors, and $P(L | \mu, \pi)  P(\mu, \pi)$ is defined in the same way as in previous section.
 
 
-\subsubsection{Sampling Algorithm}
+\subsection{Sampling Algorithm}
 
 %\begin{table}[htbp]
 %\begin{adjustwidth}{-0.5in}{-1in}

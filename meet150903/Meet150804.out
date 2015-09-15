@@ -1,8 +1,0 @@
-\BOOKMARK [1][-]{section.1}{Log Linear Model Representation}{}% 1
-\BOOKMARK [1][-]{section.2}{Multinomial Representation}{}% 2
-\BOOKMARK [2][-]{subsection.2.1}{Sparsity of Multinomial Model}{section.2}% 3
-\BOOKMARK [1][-]{section.3}{Joint Density}{}% 4
-\BOOKMARK [2][-]{subsection.3.1}{Prior on \(, \)}{section.3}% 5
-\BOOKMARK [3][-]{subsubsection.3.1.1}{Sampling Algorithm}{subsection.3.1}% 6
-\BOOKMARK [2][-]{subsection.3.2}{Measurement Error Model}{section.3}% 7
-\BOOKMARK [3][-]{subsubsection.3.2.1}{Sampling Algorithm}{subsection.3.2}% 8
