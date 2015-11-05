@@ -36,6 +36,26 @@ GenMatrices.Sparse = function(K, Smax=3)
       return(list(MuMat=MuMat, PiMat=PiMat, J1=J1))
 }
 
+# Get then row index in Lmat given M.GS
+getCellLabel = function(K, pars)
+{
+      J = pars$J1 + 1
+      lmat = rbind(rep(0,K), pars$Lmatrix[,1:K])
+      label = apply(lmat,1,function(x) paste(as.character(x),collapse=""))
+      label
+}
+# cellLabel = getCellLabel(3,Lmat)
+
+getGSindex = function(MGSi, label)
+{
+      mgs = paste(as.character(MGSi),collapse="")
+      which(label==mgs)
+}
+# getGSindex(MGS=c(0,1,0), cellLabel)
+
+
+
+########################### Likelihood components ####################################
 
 ### simulate phi given constraint defined by mu and pi
 rPhiGivenPiMu.Sparse = function(K, Smax, mu, pis, burnin=30, n=10, method="mirror", pars)
@@ -85,6 +105,10 @@ Prob.MSSBSigivenLj = function(K, MSSi, MBSi, Lj, ss_tpr, bs_tpr, bs_fpr, logscal
 # Prob.MSSBSigivenLj(K=3, MSSi=M.SS[1,], MBSi=M.BS[1,], Lj=case.state[1,], ss_tpr=SS_TPR, bs_tpr=BS_TPR, bs_fpr=BS_FPR)
 # proc.time()-t0
 
+
+
+###################################### Likelihood #########################################
+
 ### Pr[MSS, MBS | mu, pi] Likelihood without GS measurements
 Prob.SS_BS = function(K, MSS, MBS, I_GS, Pr_Lj, ss_tpr, bs_tpr, bs_fpr, pars, logscale=TRUE)
 {
@@ -109,24 +133,6 @@ Prob.SS_BS = function(K, MSS, MBS, I_GS, Pr_Lj, ss_tpr, bs_tpr, bs_fpr, pars, lo
 }
 # Prob.SS_BS(K=3, MSS=M.SS, MBS=M.BS, I_GS=I_GS, Pr_Lj=tmp, SS_TPR, BS_TPR, BS_FPR, pars=Lmat, logscale=TRUE)
 # Prob.SS_BS(K=3, MSS=M.SS, MBS=M.BS, I_GS=I_GS, Pr_Lj=tmp, c(.99,.79,.90), c(.79,.89,.95), rep(0.01,3), pars=Lmat, logscale=TRUE)
-
-
-# Get then row index in Lmat given M.GS
-getCellLabel = function(K, pars)
-{
-      J = pars$J1 + 1
-      lmat = rbind(rep(0,K), pars$Lmatrix[,1:K])
-      label = apply(lmat,1,function(x) paste(as.character(x),collapse=""))
-      label
-}
-# cellLabel = getCellLabel(3,Lmat)
-
-getGSindex = function(MGSi, label)
-{
-      mgs = paste(as.character(MGSi),collapse="")
-      which(label==mgs)
-}
-# getGSindex(MGS=c(0,1,0), cellLabel)
 
 
 ### Pr[MGS, MSS, MBS | mu, pi] Likelihood with GS measurements
@@ -172,7 +178,7 @@ Prob.ctrl = function(K, Nctrl, Mbs, bs_fpr, logscale=TRUE)
 
 
 
-#########################################################################################
+###################################### priors #############################################
 # partially informative prior on (mu, pi)
 prior.MuPi.Sparse = function(mu, pis, Alpha, Smax, logscale=TRUE)
 {
@@ -194,8 +200,28 @@ prior.MuPi.Sparse = function(mu, pis, Alpha, Smax, logscale=TRUE)
       }
 }
 
-
 #prior.MuPi.Sparse(mu=TrueMu.sparse, pis=TruePi.sparse, Alpha=c(1,4,2,1), Smax=3, logscale=TRUE)
+
+
+# informative priors for TPRs and FPR
+prior.TPR.FPR = function(ss_tpr, bs_tpr, bs_fpr, hyperPars, logscale=TRUE)
+{# hyperPars needs to be a 3K x 2 matrix
+      x = c(ss_tpr, bs_tpr, bs_fpr)
+      alpha = hyperPars[,1]
+      beta = hyperPars[,2]
+      log.prior = sum(dbeta(x=x, alpha, beta, log=TRUE))
+      if (logscale) return(log.prior)
+      else return(exp(log.prior))
+}
+
+# hpar = matrix(c(rep(30,6),rep(2,3), c(1.6, 7.5, 3.5, 7.5, 3.5, 1.6, 198, 38, 18)), ncol=2)
+# prior.TPR.FPR(ss_tpr=SS_TPR, bs_tpr=BS_TPR, bs_fpr=BS_FPR, hyperPars=hpar)
+# prior.TPR.FPR(ss_tpr=c(0.7,0.8,0.8), bs_tpr=BS_TPR, bs_fpr=BS_FPR, hyperPars=hpar)
+
+
+
+
+
 #density.YMuPi.Sparse(K=5, Smax=3, dat=dat[1:100,], mu=TrueMu.sparse, pis=TruePi.sparse, AlphaInPrior=c(1,4,2,1), logscale=TRUE, 
 #    inner.burnin=50, inner.iter=2000, method="mirror", ParMat=Lmat_S)
 
