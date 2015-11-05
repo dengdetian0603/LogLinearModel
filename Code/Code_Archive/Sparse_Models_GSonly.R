@@ -37,8 +37,7 @@ GenMatrices.Sparse = function(K, Smax=3)
 }
 
 
-### simulate phi given constraint defined by mu and pi
-rPhiGivenPiMu.Sparse = function(K, Smax, mu, pis, burnin=30, n=10, method="mirror", pars)
+rPhiGivenPiMu.Sparse = function(K, Smax, mu, pis, burnin=30, n=10, method="cda", pars)
 {
       # TODO: number of iter and output should be adaptive according to K
       pis = pis[1:(Smax+1)]
@@ -51,129 +50,65 @@ rPhiGivenPiMu.Sparse = function(K, Smax, mu, pis, burnin=30, n=10, method="mirro
       Phis = tryCatch(xsample( E = rbind(pars$PiMat,pars$MuMat), F = c(pis[-1],mu)/pis[1], G = diag(rep(1,pars$J1)), H = rep(0,pars$J1),
                       iter = n, burnin = burnin, type = method, test=FALSE), error = function(e) "Incompatible constraints.")
       if (is.character(Phis)) return(NA)
-      else return( tryCatch(Phis$X, error=function(e){ print(e); print("pi:");print(pis);print("mu:"); print(mu); return(NA)}))
+      else return( tryCatch(Phis$X[-1,], error=function(e){ print(e); print("pi:");print(pis);print("mu:"); print(mu); return(NA)}))
 }
-#rPhiGivenPiMu.Sparse(K=3,Smax=3,mu=TrueMu.exact, pis=TruePi.exact, n=50, method="mirror",pars=Lmat)
 
-### Pr[L = l_j| mu, pi]
-Prob.LgivenMuPi = function(K, Smax, mu, pis, n=500, pars)
+#rPhiGivenPiMu.Sparse(K=5,Smax=3,mu=TrueMu.sparse, pis=TruePi.sparse, method="mirror",pars=Lmat)
+
+
+dMultinom.phi.Sparse = function(K, dat, y=NULL , phi, logscale=FALSE)
 {
-      phis = rPhiGivenPiMu.Sparse(K=K,Smax=Smax,mu=mu, pis=pis, burnin=30, n=n, method="mirror",pars=pars)
-      cell.prob = colMeans(phis)*pis[1]
-      c(pis[1], cell.prob)
-}
-# Prob.LgivenMuPi(n=3000, K=3, Smax=3, mu=TrueMu.exact, pis=TruePi.exact, pars=Lmat)->tmp
-
-
-### Pr[MSS_i, MBS_i|l_j]
-Prob.MSSBSigivenLj = function(K, MSSi, MBSi, Lj, ss_tpr, bs_tpr, bs_fpr, logscale=TRUE)
-{
-      logprobs = foreach(k = 1:K, .combine='+') %do% {
-            #p1 = ((Lj[k]*ss_tpr[k]^Lj[k])^MSSi[k])*(1 - ss_tpr[k])^(Lj[k]*(1-MSSi[k]))
-            #p2 = ((bs_tpr[k]^Lj[k] * bs_fpr[k]^(1-Lj[k]))^MBSi[k]) * ((1-bs_tpr[k])^Lj[k] * (1-bs_fpr[k])^(1-Lj[k]))^(1-MBSi[k])
-
-            log.p1 = ifelse( Lj[k] + MSSi[k] < 0.5, 0, 
-                         MSSi[k]*(log(Lj[k]) + Lj[k]*log(ss_tpr[k])) + Lj[k]*(1-MSSi[k])*log(1-ss_tpr[k]) )
-            log.p2 = MBSi[k]*(Lj[k]*log(bs_tpr[k]) + (1-Lj[k])*log(bs_fpr[k])) + 
-                        (1-MBSi[k])*(Lj[k]*log(1-bs_tpr[k]) + (1-Lj[k])*log(1-bs_fpr[k]))
-            log.p1 + log.p2
+      if (length(y)<1) 
+      {
+            y = BitoMulti(dat, K)
       }
-      if (logscale) return(logprobs)
-      else return (exp(logprobs))
+      J = length(phi)
+      if (J < 2^K - 1)
+      {
+            phi[(J+1):(2^K-1)]=0
+      }
+      A = 1 + sum(phi)
+      probs = c(1,phi)/A
+      dens = dmultinom(x=y, prob=probs,log=logscale)
+      dens
 }
-# t0=proc.time()
-# Prob.MSSBSigivenLj(K=3, MSSi=M.SS[1,], MBSi=M.BS[1,], Lj=case.state[1,], ss_tpr=SS_TPR, bs_tpr=BS_TPR, bs_fpr=BS_FPR)
-# proc.time()-t0
 
-### Pr[MSS, MBS | mu, pi] Likelihood without GS measurements
-Prob.SS_BS = function(K, MSS, MBS, I_GS, Pr_Lj, ss_tpr, bs_tpr, bs_fpr, pars, logscale=TRUE)
+
+density.YgivenMuPi.Sparse = function(K, Smax, dat, y=NULL, mu, pis, logscale=FALSE, burnin=300, n=100, method="mirror", parMat)
 {
-      J = pars$J1 + 1
-      lmat = rbind(rep(0,K), pars$Lmatrix[,1:K])
-
-      log.prob_i = foreach(i = which(I_GS<1), .combine='+') %dopar% {
-            #TP.index = which(MSS[i,]>0)
-            #nonZero.index = which(rowSums(lmat[,TP.index])==length(TP.index))
-
-            #message(paste("+ i: ", i))
-            #t0=proc.time()
-            prob_ij = foreach(j = 1:J, .combine='+') %do% {
-                  Pr_Lj[j] * exp(Prob.MSSBSigivenLj(K=K, MSSi=MSS[i,], MBSi=MBS[i,], Lj=lmat[j,], 
-                                                ss_tpr=ss_tpr, bs_tpr=bs_tpr, bs_fpr=bs_fpr))
+      phis = suppressWarnings(rPhiGivenPiMu.Sparse(K=K, Smax=Smax, mu=mu, pis=pis, burnin=burnin, n=n, method=method, pars=parMat))
+      if (length(phis)<=1) 
+      {
+            warning("Incompatible Mu,Pi value, density value is considered 0.")
+            if (logscale)
+            {return(log(0))}
+            else
+            {return(0)}
+      }
+      else
+      {
+            if (length(y)<1)
+            {
+                  y = BitoMulti(dat=dat,K=K)
             }
-            #message(paste("- i: ",i," time: ", (proc.time()-t0)[3]))
-            log(prob_ij)
-      }
-      if (logscale) return(log.prob_i)
-      else return(exp(log.prob_i))
-}
-# Prob.SS_BS(K=3, MSS=M.SS, MBS=M.BS, I_GS=I_GS, Pr_Lj=tmp, SS_TPR, BS_TPR, BS_FPR, pars=Lmat, logscale=TRUE)
-# Prob.SS_BS(K=3, MSS=M.SS, MBS=M.BS, I_GS=I_GS, Pr_Lj=tmp, c(.99,.79,.90), c(.79,.89,.95), rep(0.01,3), pars=Lmat, logscale=TRUE)
-
-
-# Get then row index in Lmat given M.GS
-getCellLabel = function(K, pars)
-{
-      J = pars$J1 + 1
-      lmat = rbind(rep(0,K), pars$Lmatrix[,1:K])
-      label = apply(lmat,1,function(x) paste(as.character(x),collapse=""))
-      label
-}
-# cellLabel = getCellLabel(3,Lmat)
-
-getGSindex = function(MGSi, label)
-{
-      mgs = paste(as.character(MGSi),collapse="")
-      which(label==mgs)
-}
-# getGSindex(MGS=c(0,1,0), cellLabel)
-
-
-### Pr[MGS, MSS, MBS | mu, pi] Likelihood with GS measurements
-Prob.GS_SS_BS = function(K, MGS, MSS, MBS, I_GS, Pr_Lj, ss_tpr, bs_tpr, bs_fpr, pars, logscale=TRUE)
-{
-      J = pars$J1 + 1
-      lmat = rbind(rep(0,K), pars$Lmatrix[,1:K])
-      cell.label = apply(lmat,1,function(x) paste(as.character(x),collapse=""))
-
-      log.prob_i = foreach(i = which(I_GS>0), .combine='+') %dopar% {
-            log.prob_ik = foreach(k = 1:K, .combine='+') %do% {
-                  p1 = ((MGS[i,k]*ss_tpr[k]^MGS[i,k])^MSS[i,k])*(1 - ss_tpr[k])^(MGS[i,k]*(1-MSS[i,k]))
-                  p2 = ((bs_tpr[k]^MGS[i,k] * bs_fpr[k]^(1-MGS[i,k]))^MBS[i,k]) * ((1-bs_tpr[k])^MGS[i,k] * 
-                        (1-bs_fpr[k])^(1-MGS[i,k]))^(1-MBS[i,k])
-                  log(p1)+log(p2)
+            J = ncol(phis)
+            R = nrow(phis)
+            phis = cbind(phis, matrix(0, nrow=R, ncol=2^K-1-J))
+            X = apply(phis, 1, function(x) dMultinom.phi.Sparse(K=K, y=y, phi=x, logscale=logscale))
+            if (logscale)
+            {
+                  result = log(sum(exp(X))) -log(n)
             }
-            GSindx = which(cell.label==paste(as.character(MGS[i,]),collapse=""))
-            p3 = Pr_Lj[GSindx]
-            log.prob_ik+log(p3)
+            else
+            {
+                  result = sum(X)/n
+            }
+            return(result)
       }
-      if (logscale) return(log.prob_i)
-      else return(exp(log.prob_i))
 }
-# Prob.GS_SS_BS(K=3, MGS=M.GS, MSS=M.SS, MBS=M.BS, I_GS=I_GS, Pr_Lj=tmp, SS_TPR, BS_TPR, BS_FPR, pars=Lmat, logscale=TRUE)
-# Prob.GS_SS_BS(K=3, MGS=M.GS, MSS=M.SS, MBS=M.BS, I_GS=I_GS, Pr_Lj=tmp, c(.8,.79,.80), c(.79,.69,.85), rep(0.3,3), pars=Lmat, logscale=TRUE)
 
+#density.YgivenMuPi.Sparse(5,3,dat=dat, mu=TrueMu.sparse, pis=TruePi.sparse, logscale=TRUE, parMat=Lmat_S)
 
-### Likelihood for control data
-Prob.ctrl = function(K, Nctrl, Mbs, bs_fpr, logscale=TRUE)
-{
-      log.prob = foreach(I = 1:(K*Nctrl), .combine='+') %dopar% {
-            k = I%%K
-            k = ifelse(k<1,K,k)
-            i = (I-k)/K + 1
-            log.prob_ik = Mbs[i,k]*log(bs_fpr[k]) + (1-Mbs[i,k])*log(1-bs_fpr[k])
-            log.prob_ik
-      }
-      if (logscale) return(log.prob)
-      else return(exp(log.prob))
-}
-# Prob.ctrl(K=3, Nctrl=1000, Mbs=M.BS.ctrl, BS_FPR, TRUE)
-# Prob.ctrl(K=3, Nctrl=1000, Mbs=M.BS.ctrl, c(0.1,0.1,0.1), TRUE)
-
-
-
-#########################################################################################
-# partially informative prior on (mu, pi)
 prior.MuPi.Sparse = function(mu, pis, Alpha, Smax, logscale=TRUE)
 {
       K = length(mu)
@@ -194,6 +129,23 @@ prior.MuPi.Sparse = function(mu, pis, Alpha, Smax, logscale=TRUE)
       }
 }
 
+density.YMuPi.Sparse = function(K, Smax, dat, y=NULL, mu, pis, AlphaInPrior, logscale=FALSE, inner.burnin, inner.iter, method="cda", ParMat)
+{
+      if (length(y)<1)
+      {
+            y = BitoMulti(dat=dat,K=K)
+      }
+      f1 = density.YgivenMuPi.Sparse(K=K, Smax=Smax, y=y, mu=mu, pis=pis, logscale=logscale, burnin=inner.burnin, n=inner.iter, method=method, parMat=ParMat)
+      f2 = prior.MuPi.Sparse(mu=mu, pis=pis, Alpha=AlphaInPrior, Smax=Smax, logscale=logscale)
+      if (logscale)
+      {
+            return(f1+f2)
+      }
+      else
+      {
+            return(f1*f2)
+      }
+}
 
 #prior.MuPi.Sparse(mu=TrueMu.sparse, pis=TruePi.sparse, Alpha=c(1,4,2,1), Smax=3, logscale=TRUE)
 #density.YMuPi.Sparse(K=5, Smax=3, dat=dat[1:100,], mu=TrueMu.sparse, pis=TruePi.sparse, AlphaInPrior=c(1,4,2,1), logscale=TRUE, 
@@ -394,14 +346,14 @@ post.mu.pi.Sparse.v2 = function(K, Smax, mu.init=NULL, pi.init, iter, inner.iter
             # sample mu by block            
             if (accept_track[i-1,2]>0.5 | mean(accept_track[max(1, i-5):(i-1),1]) < 0.05)
             {
-                  mu.tmp = xsample( E = matrix(rep(1,K), nrow=1), F = crossprod(1:Smax, posterior[i-1,(K+2):(Smax+K+1)]), 
-                                    G = rbind(diag(rep(1,K)), diag(rep(-1, K))), 
-                                    H = c(rep(0,K),rep(posterior[i-1,(K+1)]-1, K)), 
-                                    iter = 100, burnin = 50, type = "mirror")$X
+            	mu.tmp = xsample( E = matrix(rep(1,K), nrow=1), F = crossprod(1:Smax, posterior[i-1,(K+2):(Smax+K+1)]), 
+            				G = rbind(diag(rep(1,K)), diag(rep(-1, K))), 
+            				H = c(rep(0,K),rep(posterior[i-1,(K+1)]-1, K)), 
+            				iter = 100, burnin = 50, type = "mirror")$X
             }
-            mu.candidate = mu.tmp[sample(2:100,1),]   
+      	mu.candidate = mu.tmp[sample(2:100,1),]	
 
-            logJointDensity = foreach(lik = 1:Ncore, .combine=c) %dopar% {
+		logJointDensity = foreach(lik = 1:Ncore, .combine=c) %dopar% {
                         if (lik < Ncore/2 + 1){
                               density.YMuPi.Sparse(K=K, Smax=Smax, y=y, mu=mu.candidate,pis=pi.candidate, AlphaInPrior=prior.alpha,
                                       logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter/2, method=densityMethod, ParMat=ParMatrix)
@@ -430,7 +382,7 @@ post.mu.pi.Sparse.v2 = function(K, Smax, mu.init=NULL, pi.init, iter, inner.iter
             pi.tmp = rdirichlet(1, alpha=prior.alpha)
             pi0.candidate = pi.tmp[1] #runif(1, min = max(0, 1-sum(mu.candidate)), max = 1-max(mu.candidate))
             pi1toSmax_2 = pi.tmp[2:(Smax-1)] # runif(Smax-2, min = 0, max = 1-pi0.candidate)
-                                             #inv.logit(logit(posterior[i-1,(K+2):(K+Smax-1)]) + rnorm(Smax-2, 0, MH.sigmaOfpi.rest))
+            		  		         #inv.logit(logit(posterior[i-1,(K+2):(K+Smax-1)]) + rnorm(Smax-2, 0, MH.sigmaOfpi.rest))
             b=numeric()
             b[1] = 1 - pi0.candidate - sum(pi1toSmax_2)
             b[2] = sum(mu.candidate) - crossprod(1:(Smax-2), pi1toSmax_2)
@@ -441,15 +393,15 @@ post.mu.pi.Sparse.v2 = function(K, Smax, mu.init=NULL, pi.init, iter, inner.iter
 
             if (prod(pi.rest>0 & pi.rest<1)>0)
             {
-                  logJointDensity2 = foreach(lik = 1:Ncore, .combine=c) %dopar% {
-                        if (lik < Ncore/2 + 1){
-                              density.YMuPi.Sparse(K=K, Smax=Smax, y=y, mu=mu.candidate,pis=pi.candidate, AlphaInPrior=prior.alpha,
-                                    logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix)
-                        } else {
-                              density.YMuPi.Sparse(K=K, Smax=Smax, y=y, mu=mu.candidate,pis=posterior[i,(K+1):(Smax+K+1)], AlphaInPrior=prior.alpha,
-                                    logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix)      
-                        }
-                  }
+            	logJointDensity2 = foreach(lik = 1:Ncore, .combine=c) %dopar% {
+            		if (lik < Ncore/2 + 1){
+            			density.YMuPi.Sparse(K=K, Smax=Smax, y=y, mu=mu.candidate,pis=pi.candidate, AlphaInPrior=prior.alpha,
+            				logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix)
+            		} else {
+            			density.YMuPi.Sparse(K=K, Smax=Smax, y=y, mu=mu.candidate,pis=posterior[i,(K+1):(Smax+K+1)], AlphaInPrior=prior.alpha,
+            				logscale=TRUE, inner.burnin=inner.burnin, inner.iter=inner.iter, method=densityMethod, ParMat=ParMatrix)      
+            		}
+            	}
                   #print(logJointDensity2)
                   #print(mean(logJointDensity2[1:(Ncore/2)] - logJointDensity2[(Ncore/2 + 1):Ncore]))
                   #print(sum(log(deriv.logit(posterior[i,(K+1):(Smax+K+1)]))))
@@ -466,8 +418,8 @@ post.mu.pi.Sparse.v2 = function(K, Smax, mu.init=NULL, pi.init, iter, inner.iter
 
             if(u <= ratio) # accept
             {
-                  posterior[i, (K+1):(Smax+K+1)] = pi.candidate
-                  accept_track[i,2] = 1
+            	posterior[i, (K+1):(Smax+K+1)] = pi.candidate
+                 	accept_track[i,2] = 1
             } else { # reject
                   pi.candidate = posterior[i,(K+1):(Smax+K+1)]
             }
