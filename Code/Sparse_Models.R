@@ -33,7 +33,7 @@ GenMatrices.Sparse = function(K, Smax=3)
       {
             PiMat[i,] = as.numeric(S==i)
       }
-      return(list(MuMat=MuMat, PiMat=PiMat, J1=J1))
+      return(list(MuMat=MuMat, PiMat=PiMat, J1=J1, Lmatrix=L.all))
 }
 
 # Get then row index in Lmat given M.GS
@@ -76,13 +76,13 @@ rPhiGivenPiMu.Sparse = function(K, Smax, mu, pis, burnin=30, n=10, method="mirro
 #rPhiGivenPiMu.Sparse(K=3,Smax=3,mu=TrueMu.exact, pis=TruePi.exact, n=50, method="mirror",pars=Lmat)
 
 ### Pr[L = l_j| mu, pi]
-Prob.LgivenMuPi = function(K, Smax, mu, pis, n=500, pars)
+Prob.LgivenMuPi = function(K, Smax, mu, pis, n=500, sparse.par)
 {
-      phis = rPhiGivenPiMu.Sparse(K=K,Smax=Smax,mu=mu, pis=pis, burnin=30, n=n, method="mirror",pars=pars)
+      phis = rPhiGivenPiMu.Sparse(K=K,Smax=Smax,mu=mu, pis=pis, burnin=30, n=n, method="mirror",pars=sparse.par)
       cell.prob = colMeans(phis)*pis[1]
       c(pis[1], cell.prob)
 }
-# Prob.LgivenMuPi(n=3000, K=3, Smax=3, mu=TrueMu.exact, pis=TruePi.exact, pars=Lmat)->tmp
+# Prob.LgivenMuPi(n=3000, K=3, Smax=3, mu=TrueMu.exact, pis=TruePi.exact, sparse.par=Lmat)->tmp
 
 
 ### Pr[MSS_i, MBS_i|l_j]
@@ -110,10 +110,10 @@ Prob.MSSBSigivenLj = function(K, MSSi, MBSi, Lj, ss_tpr, bs_tpr, bs_fpr, logscal
 ###################################### Likelihood #########################################
 
 ### Pr[MSS, MBS | mu, pi] Likelihood without GS measurements
-Prob.SS_BS = function(K, MSS, MBS, I_GS, Pr_Lj, ss_tpr, bs_tpr, bs_fpr, pars, logscale=TRUE)
+Prob.SS_BS = function(K, MSS, MBS, I_GS, Pr_Lj, ss_tpr, bs_tpr, bs_fpr, sparse_pars, logscale=TRUE)
 {
-      J = pars$J1 + 1
-      lmat = rbind(rep(0,K), pars$Lmatrix[,1:K])
+      J = sparse_pars$J1 + 1
+      lmat = rbind(rep(0,K), sparse_pars$Lmatrix[,1:K])
 
       log.prob_i = foreach(i = which(I_GS<1), .combine='+') %dopar% {
             #TP.index = which(MSS[i,]>0)
@@ -131,8 +131,8 @@ Prob.SS_BS = function(K, MSS, MBS, I_GS, Pr_Lj, ss_tpr, bs_tpr, bs_fpr, pars, lo
       if (logscale) return(log.prob_i)
       else return(exp(log.prob_i))
 }
-# Prob.SS_BS(K=3, MSS=M.SS, MBS=M.BS, I_GS=I_GS, Pr_Lj=tmp, SS_TPR, BS_TPR, BS_FPR, pars=Lmat, logscale=TRUE)
-# Prob.SS_BS(K=3, MSS=M.SS, MBS=M.BS, I_GS=I_GS, Pr_Lj=tmp, c(.99,.79,.90), c(.79,.89,.95), rep(0.01,3), pars=Lmat, logscale=TRUE)
+# Prob.SS_BS(K=3, MSS=M.SS, MBS=M.BS, I_GS=I_GS, Pr_Lj=tmp, SS_TPR, BS_TPR, BS_FPR, sparse_pars=Lmat, logscale=TRUE)
+# Prob.SS_BS(K=3, MSS=M.SS, MBS=M.BS, I_GS=I_GS, Pr_Lj=tmp, c(.99,.79,.90), c(.79,.89,.95), rep(0.01,3), sparse_pars=Lmat, logscale=TRUE)
 
 
 ### Pr[MGS, MSS, MBS | mu, pi] Likelihood with GS measurements
@@ -149,7 +149,7 @@ Prob.GS_SS_BS = function(K, MGS, MSS, MBS, I_GS, Pr_Lj, ss_tpr, bs_tpr, bs_fpr, 
                         (1-bs_fpr[k])^(1-MGS[i,k]))^(1-MBS[i,k])
                   log(p1)+log(p2)
             }
-            GSindx = which(cell.label==paste(as.character(MGS[i,]),collapse=""))
+            GSindx = which(cell.label==paste(as.character(MGS[i,]),collapse="")) ## this step might be slow for large J1
             p3 = Pr_Lj[GSindx]
             log.prob_ik+log(p3)
       }
@@ -200,7 +200,7 @@ prior.MuPi.Sparse = function(mu, pis, Alpha, Smax, logscale=TRUE)
       }
 }
 
-#prior.MuPi.Sparse(mu=TrueMu.sparse, pis=TruePi.sparse, Alpha=c(1,4,2,1), Smax=3, logscale=TRUE)
+# prior.MuPi.Sparse(mu=TrueMu.sparse, pis=TruePi.sparse, Alpha=c(1,4,2,1), Smax=3, logscale=TRUE)
 
 
 # informative priors for TPRs and FPR
@@ -219,11 +219,32 @@ prior.TPR.FPR = function(ss_tpr, bs_tpr, bs_fpr, hyperPars, logscale=TRUE)
 # prior.TPR.FPR(ss_tpr=c(0.7,0.8,0.8), bs_tpr=BS_TPR, bs_fpr=BS_FPR, hyperPars=hpar)
 
 
+###################################### Full Joint density ##########################################
+# tmp = Prob.LgivenMuPi(n=3000, K=3, Smax=3, mu=TrueMu.exact, pis=TruePi.exact, sparse.par=Lmat)
 
+Joint.Density = function(K, Smax, MGS, I_GS, MSS, MBS, Mbs_ctrl, N_ctrl, 
+						latent.cell.probs, mus, pis, ss_tpr, bs_tpr, bs_fpr, DirichPar, BetaPars, 
+						sparse_par, logscale=TRUE)
+{
+	lik.case.withGS = Prob.GS_SS_BS(K=K, MGS=MGS, MSS=MSS, MBS=MBS, I_GS=I_GS, 
+						Pr_Lj=latent.cell.probs, ss_tpr, bs_tpr, bs_fpr, pars=sparse_par, logscale=TRUE)
 
+	lik.case.noGS = Prob.SS_BS(K=K, MSS=MSS, MBS=MBS, I_GS=I_GS, 
+						Pr_Lj=latent.cell.probs, ss_tpr, bs_tpr, bs_fpr, sparse_pars=sparse_par, logscale=TRUE)
 
-#density.YMuPi.Sparse(K=5, Smax=3, dat=dat[1:100,], mu=TrueMu.sparse, pis=TruePi.sparse, AlphaInPrior=c(1,4,2,1), logscale=TRUE, 
-#    inner.burnin=50, inner.iter=2000, method="mirror", ParMat=Lmat_S)
+	lik.ctrl = Prob.ctrl(K=K, Nctrl=N_ctrl, Mbs=Mbs_ctrl, bs_fpr, logscale=TRUE)
+	
+	prior.mupi = prior.MuPi.Sparse(mu=mus, pis=pis, Alpha=DirichPar, Smax=Smax, logscale=TRUE)
+	prior.tfpr = prior.TPR.FPR(ss_tpr, bs_tpr, bs_fpr, hyperPars=BetaPars, logscale=TRUE)
+
+	log.density = lik.case.withGS + lik.case.noGS + lik.ctrl + prior.mupi + prior.tfpr
+	if (logscale) return(log.density)
+    else return(exp(log.density))
+}
+
+# Joint.Density(K=3, Smax=3, MGS=M.GS, I_GS=I_GS, MSS=M.SS, MBS=M.BS, Mbs_ctrl=M.BS.ctrl, N_ctrl=1000, 
+# 			  latent.cell.probs=tmp, mus=TrueMu.exact, pis=TruePi.exact, ss_tpr=SS_TPR, bs_tpr=BS_TPR, bs_fpr=BS_FPR, 
+# 			  DirichPar=c(1,4,2,1), BetaPars=hpar, sparse_par=GenMatrices.Sparse(3,3), logscale=TRUE)
 
 # -------------------------------------------------------------------------------------------------------------------------- #
 # Random Walk Proposal
