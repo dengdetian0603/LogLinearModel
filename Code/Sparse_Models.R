@@ -512,4 +512,210 @@ RWMH_sampler.v1 = function(K, Smax, MGS, I_GS, MSS, MBS, MBS.ctrl, N.ctrl,
 # colMeans(result$posterior[-(1:100),])
 # stem(result$posterior[-(1:100),3])
 
+RWMH_sampler.v2 = function(K, Smax, MGS, I_GS, MSS, MBS, MBS.ctrl, N.ctrl, 
+                                 mu.init=NULL, pi.init, ss_tpr.init, bs_tpr.init, bs_fpr.init, DirichPar, BetaPar,
+                                 iter, inner.iter, burnin, jmp1, jmp2, jmp3, jmp4)
+{
+      ParMatrix = GenMatrices.Sparse(K,Smax)
+      PiMat = ParMatrix$PiMat
+      MuMat = ParMatrix$MuMat
+      J1 = ParMatrix$J1
+      lall.mat = rbind(rep(0,K), ParMatrix$Lmatrix[,1:K])
+      cell.labels = apply(lall.mat,1,function(x) paste(as.character(x),collapse=""))
 
+      mus.posterior = matrix(NA, nrow=iter+burnin, ncol=K)
+      pis.posterior = matrix(NA, nrow=iter+burnin, ncol=Smax+1)
+      ss_tpr.posterior = matrix(NA, nrow=iter+burnin, ncol=K)
+      bs_tpr.posterior = matrix(NA, nrow=iter+burnin, ncol=K)
+      bs_fpr.posterior = matrix(NA, nrow=iter+burnin, ncol=K)
+
+
+      # Initialize
+      mus.posterior[1,] = rep(crossprod(1:Smax, pi.init[-1])/K, K)
+      pis.posterior[1,] = pi.init
+      ss_tpr.posterior[1,] = ss_tpr.init
+      bs_tpr.posterior[1,] = bs_tpr.init
+      bs_fpr.posterior[1,] = bs_fpr.init
+
+      accept_track = matrix(0, nrow=iter+burnin, ncol=4)
+      accept_track[1,] = rep(1, 4)
+      alpha_track = accept_track
+      loglik_track = numeric(iter+burnin)
+      
+      message("Start block M-H sampling...")
+
+      cell.prob.previous = Prob.LgivenMuPi(n=inner.iter, K=K, Smax=Smax, 
+                        mu=mus.posterior[1,], pis=pis.posterior[1,], sparse.par=ParMatrix)
+
+      loglik_track[1] = Joint.Density.Cpp(K=K, Smax=Smax, MGS=MGS, I_GS=I_GS, MSS=MSS, MBS=MBS, Mbs_ctrl=MBS.ctrl, N_ctrl=N.ctrl, 
+                    latent.cell.probs=cell.prob.previous, 
+                    mus=mus.posterior[1,], 
+                    pis=pis.posterior[1,], 
+                    ss_tpr=ss_tpr.posterior[1,], 
+                    bs_tpr=bs_tpr.posterior[1,], 
+                    bs_fpr=bs_fpr.posterior[1,], 
+                    DirichPar=DirichPar, BetaPars=BetaPar, logscale=TRUE, cell.labels=cell.labels, Lall_mat=lall.mat)
+
+      for (i in 2:(iter+burnin))
+      {
+            # record keeping
+            print(c(i, accept_track[i-1,],floor(loglik_track[i-1])))
+            if (i%%25 == 0) 
+            {
+                  print(round(c(mus.posterior[i-1,]),3))
+                  print(round(c(pis.posterior[i-1,]),3))
+                  print(round(c(ss_tpr.posterior[i-1,]),3))
+                  print("Trailing 200 sample mean:")
+                  print(round(apply(pis.posterior[max(1, i-200):(i-1),],2,mean),3))
+            }
+            if (i%%10 == 0) 
+            {
+                  print("Average accept rate:")
+                  print(apply(accept_track[1:i,],2,mean))
+                  print("Trailing 20 accept rate:")
+                  print(apply(accept_track[max(1, i-19):i,],2,mean))
+            }
+
+            # sample by blocks: (mus, pis), (t/fpr)
+            # Mu, Pi -----------------------------------------------------------------------------------------------
+            mupi.candidate = Proposal_MuPi(mus.posterior[i-1,], pis.posterior[i-1,], jmp1, K, Smax)
+            #print(mupi.candidate)
+            mus.candidate = mupi.candidate[1:K]
+            pis.candidate = mupi.candidate[-(1:K)]
+
+            cell.prob.candidate = Prob.LgivenMuPi(n=inner.iter, K=K, Smax=Smax, 
+                        mu=mus.candidate, pis=pis.candidate, sparse.par=ParMatrix)
+            #print(cell.prob.candidate)
+
+            if (is.na(cell.prob.candidate))
+            {
+                  logP.mupi_t1 = -Inf
+            }
+            else{
+                  logP.mupi_t1 = Joint.Density.Cpp(K=K, Smax=Smax, MGS=MGS, I_GS=I_GS, MSS=MSS, MBS=MBS, Mbs_ctrl=MBS.ctrl, N_ctrl=N.ctrl, 
+                        latent.cell.probs=cell.prob.candidate, 
+                        mus=mus.candidate, 
+                        pis=pis.candidate, 
+                        ss_tpr=ss_tpr.posterior[i-1,], bs_tpr=bs_tpr.posterior[i-1,], bs_fpr=bs_fpr.posterior[i-1,], 
+                        DirichPar=DirichPar, BetaPars=BetaPar, logscale=TRUE, cell.labels=cell.labels, Lall_mat=lall.mat)
+            }
+
+            logP.mupi_t0 = loglik_track[i-1]
+            
+            alpha = exp(logP.mupi_t1 - logP.mupi_t0)
+            alpha_track[i,1] = alpha
+
+            ratio = min(1,alpha); #print(ratio)
+            u = runif(1)
+            if(u <= ratio) # accept
+            {
+                  mus.posterior[i,] = mus.candidate
+                  pis.posterior[i,] = pis.candidate
+                  accept_track[i,1] = 1
+                  cell.prob.previous = cell.prob.candidate
+
+            }
+            else # reject
+            {
+                  mus.posterior[i,] = mus.posterior[i-1,]
+                  pis.posterior[i,] = pis.posterior[i-1,]
+            }
+
+            # (ss_tpr) ------------------------------------------------------------------------
+            ss_tpr.candidate = Proposal_TFpr(ss_tpr.posterior[i-1,], jmp2, K)
+
+            logP.sstpr_t0 = ifelse(accept_track[i,1], logP.mupi_t1, logP.mupi_t0)
+
+            logP.sstpr_t1 = Joint.Density.Cpp(K=K, Smax=Smax, MGS=MGS, I_GS=I_GS, MSS=MSS, MBS=MBS, Mbs_ctrl=MBS.ctrl, N_ctrl=N.ctrl, 
+                        latent.cell.probs=cell.prob.previous, 
+                        mus=mus.posterior[i,], pis=pis.posterior[i,], 
+                        ss_tpr=ss_tpr.candidate, 
+                        bs_tpr=bs_tpr.posterior[i-1,], 
+                        bs_fpr=bs_fpr.posterior[i-1,], 
+                        DirichPar=DirichPar, BetaPars=BetaPar, logscale=TRUE, cell.labels=cell.labels, Lall_mat=lall.mat)
+
+            alpha = exp(logP.sstpr_t1 - logP.sstpr_t0)
+            alpha_track[i,2] = alpha
+
+            ratio = min(1,alpha); #print(ratio)
+            u = runif(1)
+            if(u <= ratio) # accept
+            {
+                  ss_tpr.posterior[i,] = ss_tpr.candidate                   
+                  accept_track[i,2] = 1
+            }
+            else # reject
+            {
+                  ss_tpr.posterior[i,] = ss_tpr.posterior[i-1,] 
+                  ss_tpr.candidate = NA # reset candidate
+            }
+
+            # (bs_tpr) ------------------------------------------------------------------------
+            bs_tpr.candidate = Proposal_TFpr(bs_tpr.posterior[i-1,], jmp3, K)
+
+            logP.bstpr_t0 = ifelse(accept_track[i,1], logP.sstpr_t1, logP.sstpr_t0)
+
+            logP.bstpr_t1 = Joint.Density.Cpp(K=K, Smax=Smax, MGS=MGS, I_GS=I_GS, MSS=MSS, MBS=MBS, Mbs_ctrl=MBS.ctrl, N_ctrl=N.ctrl, 
+                        latent.cell.probs=cell.prob.previous, 
+                        mus=mus.posterior[i,], pis=pis.posterior[i,], 
+                        ss_tpr=ss_tpr.posterior[i,], 
+                        bs_tpr=bs_tpr.candidate, 
+                        bs_fpr=bs_fpr.posterior[i-1,], 
+                        DirichPar=DirichPar, BetaPars=BetaPar, logscale=TRUE, cell.labels=cell.labels, Lall_mat=lall.mat)
+
+            alpha = exp(logP.bstpr_t1 - logP.bstpr_t0)
+            alpha_track[i,3] = alpha
+
+            ratio = min(1,alpha); #print(ratio)
+            u = runif(1)
+            if(u <= ratio) # accept
+            {
+                  bs_tpr.posterior[i,] = bs_tpr.candidate                   
+                  accept_track[i,3] = 1
+            }
+            else # reject
+            {
+                  bs_tpr.posterior[i,] = bs_tpr.posterior[i-1,] 
+                  bs_tpr.candidate = NA # reset candidate
+            }
+
+
+            # (bs_fpr) ------------------------------------------------------------------------
+            bs_fpr.candidate = Proposal_TFpr(bs_fpr.posterior[i-1,], jmp4, K)
+
+            logP.bsfpr_t0 = ifelse(accept_track[i,1], logP.bstpr_t1, logP.bstpr_t0)
+
+            logP.bsfpr_t1 = Joint.Density.Cpp(K=K, Smax=Smax, MGS=MGS, I_GS=I_GS, MSS=MSS, MBS=MBS, Mbs_ctrl=MBS.ctrl, N_ctrl=N.ctrl, 
+                        latent.cell.probs=cell.prob.previous, 
+                        mus=mus.posterior[i,], pis=pis.posterior[i,], 
+                        ss_tpr=ss_tpr.posterior[i,], 
+                        bs_tpr=bs_tpr.posterior[i,], 
+                        bs_fpr=bs_fpr.candidate, 
+                        DirichPar=DirichPar, BetaPars=BetaPar, logscale=TRUE, cell.labels=cell.labels, Lall_mat=lall.mat)
+
+            alpha = exp(logP.bsfpr_t1 - logP.bsfpr_t0)
+            alpha_track[i,4] = alpha
+
+            ratio = min(1,alpha); #print(ratio)
+            u = runif(1)
+            if(u <= ratio) # accept
+            {
+                  bs_fpr.posterior[i,] = bs_fpr.candidate                   
+                  accept_track[i,4] = 1
+            }
+            else # reject
+            {
+                  bs_fpr.posterior[i,] = bs_fpr.posterior[i-1,] 
+                  bs_fpr.candidate = NA # reset candidate
+            }
+
+            loglik_track[i] = ifelse(accept_track[i,4], logP.bsfpr_t1, logP.bsfpr_t0)
+      }
+
+      posterior = cbind(mus.posterior, pis.posterior, ss_tpr.posterior, bs_tpr.posterior, bs_fpr.posterior)
+      colnames(posterior) = c(paste0("Mu_",1:K), paste0("Pi_",0:Smax), 
+                              paste0("SS_TPR_",1:K), paste0("BS_TPR_",1:K), paste0("BS_FPR_",1:K))
+
+      list(posterior = posterior[-(1:burnin),], history.alpha = alpha_track[-(1:burnin),], 
+           history.accept = accept_track[-(1:burnin),], history.Likelihood = loglik_track[-(1:burnin)])
+}
