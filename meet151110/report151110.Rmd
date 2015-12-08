@@ -6,19 +6,21 @@ output: html_document
 ---
 
 ```{r echo=FALSE, message=FALSE}
-load("~/Documents/JHSPH/Research/S.Zeger/LogLinearModel/meet151110/3Patho_job_b4.Rdata")
+load("~/Documents/JHSPH/Research/S.Zeger/Results/3Patho_samplesize_noGS_4.Rdata")
 library(coda)
 library(ggtern)
 
-mc.chain = mcmc(result$posterior[-(1:3000),])
+mc.chain = mcmc(result$posterior[-1,])
+mc.chain.thin = window(mc.chain, thin=5)
 mc.est = summary(mc.chain)$statistics[,1:2]
+mc.est.thin = summary(mc.chain.thin)$statistics[,1:2]
 ```
 
 ## 3 Pathogens; 300 Cases, 10 with GS-SS-BS measurements, 290 with SS-BS measurements; 1000 Controls.
 ### True parameter values are set to: 
 ```{r echo=TRUE}
 TrueValue = c(TrueMu.exact, TruePi.exact, SS_TPR, BS_TPR, BS_FPR)
-TrueValue
+#TrueValue
 priormean.beta = apply(betapar,1,function(x) x[1]/sum(x))
 PriorMean = c(prior, priormean.beta)
 ```
@@ -43,29 +45,71 @@ round(cbind(TrueValue, PriorMean, mc.est),3)
 ```{r}
 par(mar=c(2,2,1,1))
 plot(mc.chain)
+plot(mc.chain.thin)
 
-downsample=sample(5000:10000, 300)
-mu1toK = result$posterior[downsample, 1:3]
-ternplot = ggtern(data = data.frame(mu_1 = mu1toK[,1],
-                                 mu_2 = mu1toK[,2],
-                                 mu_3 = mu1toK[,3]),
+plot(result$history.Likelihood[-(1:1000)], type="l")
+
+downsample=sample(3000:15000, 10000)
+
+mu1toK.mc = result$posterior[downsample, 1:3]
+ternplot = ggtern(data = data.frame(mu_1 = mu1toK.mc[,1],
+                                 mu_2 = mu1toK.mc[,2],
+                                 mu_3 = mu1toK.mc[,3]),
                aes(mu_1, mu_2, mu_3))
-ternplot + geom_density_tern(n = 100, aes(fill  = ..level.., alpha = ..level..)) +
-      geom_point(aes(alpha=0.3)) +
-      theme_rgbw() +
-      labs(title = "Density/Contour Plot")    +
+ternplot + geom_density_tern(n = 150, aes(fill  = ..level.., alpha = ..level..)) +
+      #geom_point(aes(alpha=0.3)) +
+      geom_point(data = data.frame(mu_1=0.584, mu_2=0.298, mu_3=0.378), size=5) +
+      theme_rgbw(base_size = 26) +
+      labs(title = "Posterior Distribution of Mu")    +
       scale_fill_gradient(low = "blue",high = "red")  +
       guides(color = "none", fill = "none", alpha = "none")
 
-pi0toK =  result$posterior[downsample, 4:7]
+downsample = sample(1:3000,3000)
+ternplot = ggtern(data = data.frame(mu_1 = mu1toK[downsample,1],
+                                 mu_2 = mu1toK[downsample,2],
+                                 mu_3 = mu1toK[downsample,3]),
+               aes(mu_1, mu_2, mu_3))
+ternplot + geom_density_tern(n = 100, aes(fill  = ..level.., alpha = ..level..)) +
+      #geom_point(aes(alpha=0.3)) +
+      geom_point(data = data.frame(mu_1=0.584, mu_2=0.298, mu_3=0.378), size=5) +
+      theme_rgbw(base_size = 26) +
+      labs(title = "Prior Distribution of Mu")    +
+      scale_fill_gradient(low = "blue",high = "red")  +
+      guides(color = "none", fill = "none", alpha = "none")
+
+
+downsample=sample(2000:15000, 5000)
+
+pi0toK.mc =  result$posterior[downsample, 4:7]
+ternplot = ggtern(data = data.frame(pi_1 = pi0toK.mc[,2],
+                                    pi_2 = pi0toK.mc[,3],
+                                    pi_3 = pi0toK.mc[,4]),
+                  aes(pi_1, pi_2, pi_3))
+ternplot + geom_density_tern(n = 150, aes(fill  = ..level.., alpha = ..level..)) +
+     # geom_point(aes(alpha=0.3)) +
+      geom_point(data = data.frame(pi_1=0.6, pi_2=0.25, pi_3=0.05), size=5) +
+      theme_rgbw(base_size = 26) +
+      labs(title = "Posterior Distribution of Pi")    +
+      scale_fill_gradient(low = "blue",high = "red")  +
+      guides(color = "none", fill = "none", alpha = "none")
+
+
 ternplot = ggtern(data = data.frame(pi_1 = pi0toK[,2],
                                     pi_2 = pi0toK[,3],
                                     pi_3 = pi0toK[,4]),
                   aes(pi_1, pi_2, pi_3))
-ternplot + geom_density_tern(n = 100, aes(fill  = ..level.., alpha = ..level..)) +
-      geom_point(aes(alpha=0.3)) +
-      theme_rgbw() +
-      labs(title = "Density/Contour Plot")    +
+ternplot + geom_density_tern(n = 150, aes(fill  = ..level.., alpha = ..level..)) +
+     # geom_point(aes(alpha=0.3)) +
+      geom_point(data = data.frame(pi_1=0.6, pi_2=0.25, pi_3=0.05), size=5) +
+      theme_rgbw(base_size = 26) +
+      labs(title = "Prior Distribution of Pi")    +
       scale_fill_gradient(low = "blue",high = "red")  +
       guides(color = "none", fill = "none", alpha = "none")
+
 ```
+
+
+
+
+
+
