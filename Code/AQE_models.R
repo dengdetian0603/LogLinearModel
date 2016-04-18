@@ -3,7 +3,8 @@ library(doMC)
 library(foreach)
 library(gtools)
 library(Rcpp)
-# dependent on ToolBox_PERCH.R
+library(nleqslv)
+library(mgcv)
 
 #---------------------------------------------------------------------------
 logit = function(x)
@@ -20,6 +21,7 @@ deriv.logit = function(x)
 {
       1/x + 1/(1-x)
 }
+
 
 ########################################################################################
 ################################### Design Matrix Preparation ###################################
@@ -92,9 +94,130 @@ MuToTheta1 = function(Mu, Theta2, LUmat, MuMat, K, initvalue=NULL){
 # dmat = AQE.DesignMatrix(3,3)
 # MuToTheta1(Mu=c(0.3,0.4,0.5), Theta2=c(-1,-0.5, 0.8), cbind(dmat$Lmat, dmat$Umat), dmat$MuMat, K=3, initvalue=NULL)
 
+
+
+########################################################################################
+################################### Simulation Tools ###################################
+########################################################################################
+
+AQE.simulate = function(K=3, P=c(0.5,0.2), N=50, beta=NULL, theta2=c(-1,-0.5, 0.8), 
+                                    ss_tpr, bs_tpr, bs_fpr, seed = 123, tol=1e-8) 
+{
+      set.seed(seed)
+
+      D = length(P) + 1
+      dmat = AQE.DesignMatrix(K,3)
+      lumat = cbind(dmat$Lmat, dmat$Umat)
+      lmat.withZero = rbind(rep(0,K), dmat$Lmat)
+
+      if (length(beta)<1 & D == 3) {
+            beta = matrix(NA, nrow=D, ncol=K)
+            beta[1,] = logit(c(0.7,0.25,0.4))
+            beta[2,] = rbinom(K,1,0.5)-0.5
+            beta[3,] = rbinom(K,1,0.4)*0.5
+      }
+
+      X = matrix(NA, nrow=N, ncol=D)
+      X[,1] = 1
+      for (p in 2:D) {
+            X[,p] = rbinom(N, 1, P[p-1])
+      }
+      X.unique = uniquecombs(X)
+      X.index = attr(X.unique, "index")
+
+      Mu.unique = inv.logit(X.unique%*%beta)
+      theta1.unique = t(apply(Mu.unique, 1, function(x) { MuToTheta1(Mu=x, Theta2=theta2, lumat, dmat$MuMat, K=K, initvalue=NULL)$x }) )
+      cellprobs.unique = t(apply(theta1.unique, 1, function(x) {c(1, exp(lumat%*%c(x, theta2)))/(1+sum(exp(lumat%*%c(x, theta2))))} ) )
+
+      # check compatibility
+      abs.err = norm( Mu.unique - t(apply(cellprobs.unique, 1, function(x) {dmat$MuMat%*%x[-1]} ) ) )
+      if (abs.err > tol){ 
+            message("Simulation error. Try again using compatible parameters or a different seed.")
+            return("Simulation error.")
+      }
+      # dmat$MuMat%*%(exp(lumat%*%c(theta1.unique[3,], theta2))/(1+sum(exp(lumat%*%c(theta1.unique[3,], theta2)))))
+      # 1/(1+sum(exp(lumat%*%c(theta1.unique[3,], theta2))))
+      
+      L = t(sapply(X.index, function(x) {t(rmultinom(1,1,cellprobs.unique[x,]))%*%lmat.withZero } ) )
+
+      LtoM = function(L,TPR,FPR){
+            k = ncol(L)
+            notL = 1-L
+            #registerDoMC(detectCores()) 
+            M= foreach(i=1:nrow(L), .combine=rbind) %dopar% {
+                  rbinom(k,1,L[i,]*TPR+notL[i,]*FPR)
+            }
+            M
+      }
+
+      # ss_tpr = c(0.05, 0.12, 0.08); bs_tpr = c(0.8,0.6, 0.7); bs_fpr = c(0.5, 0.55, 0.4)
+      MSS.case = LtoM(L, ss_tpr, 0)
+      MBS.case = LtoM(L, bs_tpr, bs_fpr)
+      MBS.ctrl = t(matrix(rbinom(N*K, 1, bs_fpr), nrow=K))
+
+      return(list(L=L, MSS.case=MSS.case, MBS.case=MBS.case, MBS.ctrl=MBS.ctrl, abs.err=abs.err))
+}
+
+# ss_tpr = c(0.05, 0.12, 0.08); bs_tpr = c(0.8,0.6, 0.7); bs_fpr = c(0.5, 0.55, 0.4)
+# Data = AQE.simulate(N=20, ss_tpr=ss_tpr, bs_tpr=bs_tpr, bs_fpr=bs_fpr, seed=12345)
+
+
+
 ########################################################################################
 ######################## MH within Gibbs with Data Augmentation #########################
 ########################################################################################
+
+next_PositiveRates = function(K, L, MSS, MBS.case, MBS.ctrl, a, b, c, d, e, f){
+      A = B = C = D = E = F = rep(NA, K)
+      Ncase = nrow(L)
+      Nctrl = nrow(MBS.ctrl)
+
+      for (k in 1:K){
+            sumLSS = crossprod(L[,k], MSS[,k])
+            sumL = sum(L[,k])
+            A[k] = sumLSS + a[k]
+            B[k] = sumL - sumLSS + b[k]
+
+            sumLBS = crossprod(L[,k], MBS.case[,k])
+            C[k] = sumLBS + c[k]
+            D[k] = sumL - sumLBS + d[k]
+
+            sumBS = sum(MBS.case[,k])
+            sumBSct = sum(MBS.ctrl[,k])
+            E[k] = sumBS - sumLBS + e[k] + sumBSct
+            F[k] = Ncase - sumBS - sumL + sumLBS + Nctrl - sumBSct 
+      }
+      ss_tpr.new = rbeta(K, A, B)
+      bs_tpr.new = rbeta(K, C, D)
+      bs_fpr.new = rbeta(K, E, F)
+      return(rbind(ss_tpr.new, bs_tpr.new, bs_fpr.new))
+}
+# next_PositiveRates(K, Data$L, Data$MSS.case, Data$MBS.case, Data$MBS.ctrl, rep(1,3), rep(1,3),rep(1,3),rep(1,3),rep(1,3),rep(1,3))
+
+## TODO: next_L, HMC step for beta & theta2
+next_L = function(K, MSS, MBS.case, ss_tpr, bs_tpr, bs_fpr, X.index, cellprobs.unique){
+      
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ### Pr[MSS, MBS | mu, pi] Likelihood without GS measurements
 Prob.SS_BS = function(K, MSS, MBS, I_GS, Pr_Lj, ss_tpr, bs_tpr, bs_fpr, sparse_pars, logscale=TRUE)

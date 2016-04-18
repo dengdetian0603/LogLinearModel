@@ -2,6 +2,7 @@ library(limSolve)
 library(doMC)
 library(foreach)
 library(gtools)
+library(nleqslv)
 
 #--------------------- Design Matrix Preparation ------------------------------------------------------
 logit = function(x)
