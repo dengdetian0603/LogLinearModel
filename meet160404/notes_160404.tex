@@ -1,0 +1,154 @@
+\documentclass[11 pt, a4paper]{article}  % list options between brackets
+\usepackage[nottoc,notlof,notlot,numbib]{tocbibind}
+\usepackage[margin=1.2 in]{geometry}
+\usepackage{fancyhdr}
+\usepackage{manfnt}
+\usepackage{pgf}
+\usepackage{amsmath,amssymb,natbib,graphicx}
+\usepackage{amsfonts}
+\DeclareMathAlphabet{\mathpzc}{OT1}{pzc}{m}{it}
+\usepackage{bbm}
+\usepackage{hyperref}
+\usepackage{float}
+\usepackage{mathrsfs} %mathscr{A}
+
+\usepackage{chngpage}
+\usepackage{layouts}
+
+\usepackage{times}
+\usepackage{latexsym}
+\usepackage{caption}
+\usepackage{graphicx}
+
+\usepackage{subcaption}
+
+\usepackage{algorithm}
+\usepackage[noend]{algpseudocode}
+
+\newtheorem{axiom}{Axiom}[section]
+\newtheorem{result}{Result}[section]
+\newtheorem{example}{example}[section]
+\newtheorem{definition}{Definition}[section]
+\newtheorem{principle}{Principle}[section]
+\newtheorem{theorem}{Theorem}[section]% list packages between braces
+
+% type user-defined commands here
+%\newcommand{\vmu}{{\bf \mu}}
+%\newcommand{\vtheta1}{{\bf \theta^{(1)}}}
+%\newcommand{\vtheta2}{{\bf \theta^{(2)}}}
+%\newcommand{\vpi}{{\bf \pi}}}
+
+\newcommand{\gm}{\gamma}
+
+
+\linespread{1.3}
+\begin{document}
+
+\title{Progress Notes}   % type title between braces
+\author{Detian Deng}         % type author(s) between braces
+\date{\today}    % type date between braces
+%\maketitle
+
+%\begin{abstract}
+%\end{abstract}
+
+\newpage
+\section{Approximated Quadratic Exponential Model}
+Let $L$ be a K-dimensional binary random variable denoting the true state of the lung. The general form of the log-linear model is:
+\begin{align*}
+P(L=l; \Theta) = & \exp \{\Theta_1^T l + \Theta_2^{T} u_2 + \ldots + \Theta_K^T u_K\}/ A(\Theta) 
+\end{align*}
+where $w_k$ is a ${K \choose k} \times 1$ vector of the $k$-way cross-products of $l$, $k = 1,\ldots,K$,  and $\Theta = (\Theta_1,\ldots, \Theta_K)$ contains the the canonical parameters, which is a $(2^K-1) \times 1$ vector. $\Theta_1$ contains the $k$ conditional log odds' and the rest contains the conditional log odds ratios, regarded as the association parameters. Moreover, let $l^* = (l,w_2,\dots,w_K)^T$, the normalizing term is defined as
+\begin{align*}
+A(\Theta) = & \sum_{l^*\in \{0,1\}^K}\exp \{ \Theta^T l^*\} 
+\end{align*}
+
+We propose an Approximated Quadratic Exponential Model (AQE) for large $K$ with competing binary variables by defining
+\begin{align}
+P(L=l; \Theta) = & \exp \{\Theta_1^T l + \Theta_2^{T} u_2 \}/ \hat{A}(\Theta) \\
+\hat{A}(\Theta) = & \sum_{l:l^T\mathbf{1} \le S_{\max}}\exp \{ \Theta^T l\} 
+\end{align}
+
+
+
+
+
+
+\newpage
+Let $M_i^{GS} \in \{0,1\}^K$ be the observed GS measurement, $M_i^{SS} \in \{0,1\}^K$ be the observed SS measurement, $M_i^{BS} \in \{0,1\}^K$ be the observed BS measurement and $L_i \in \{0,1\}^K$ be the latent status for subject $i$. Let $\gamma \in [0,1]^K$ and $\delta \in [0,1]^K$ represent the True Positive Rate (TPR) and False Positive Rate (FPR) for BS measurements respectively, and let $\eta \in [0,1]^K$ be the TPR for SS measurements. Also, let $\mathbb{L}$ be the set of all allowed values of L, such that $|\mathbb{L}| = J^*$ and $l_j$ be the $j$th element in $\mathbb{L}$.
+
+\subsection{The Likelihood for Cases}
+For cases without GS measurements, and under the conditional independence assumption for measurement given latent class, the likelihood function is
+\begin{align*}
+ P(M_i^{SS},M_i^{BS} | \mu, \pi, \eta, \gamma, \delta) 
+ = & \sum_{j = 1}^{J^*}  P(M_i^{SS},M_i^{BS}, l_j | \mu, \pi, \eta, \gamma, \delta)  \\ 
+= & \sum_{j = 1}^{J^*} \big[ P(M_i^{SS} | l_j, \eta) P(M_i^{BS} | l_j, \gamma, \delta) P(l_j | \mu, \pi) \big ] 
+\end{align*}
+\\
+where $P(l_j | \mu, \pi)$ is defined using (10), and
+\begin{align}
+P(M_i^{SS} | l_j, \eta) = & \prod_{k=1}^K P(M_{ik} | l_{jk}, \eta_k) \nonumber \\
+ = & \prod_{k=1}^K (\eta_k^{l_{jk}}l_{jk})^{M_{ik}} (1-\eta_k)^{l_{jk}(1-M_{ik})}\\
+P(M_i^{BS} | l_j, \gamma, \delta) = & \prod_{k=1}^K P(M_{ik} | l_{jk}, \gamma_k, \delta_k) \nonumber \\
+ = & \prod_{k=1}^K (\gamma_k^{l_{jk}} \delta_k^{1-l_{jk}})^{M_{ik}} [(1-\gamma_k)^{l_{jk}} (1-\delta_k)^{1-l_{jk}}]^{1-M_{ik}}
+\end{align}
+\\
+For cases with GS measurements, we have $L_i = M_i^{GS}$, then the likelihood is 
+\begin{align*}
+ P(M_i^{GS},M_i^{SS},M_i^{BS} | \mu, \pi, \eta, \gamma, \delta) 
+= & P(M_i^{SS},M_i^{BS} | M_i^{GS} \eta, \gamma, \delta) P(M_i^{GS} | \mu, \pi)\\
+= & P(M_i^{SS}| M_i^{GS}, \eta) P(M_i^{BS} | M_i^{GS}, \gamma, \delta) P(M_i^{GS} | \mu, \pi)
+\end{align*}
+\\
+where $P(M_i^{SS}| M_i^{GS}, \eta)$ is defined using (12), $P(M_i^{BS} | M_i^{GS}, \gamma, \delta)$ is defined using (13), and $P(M_i^{GS} | \mu, \pi)$ is defined using (10).\\
+
+\subsection{The Likelihood for Controls}
+For controls, we only have BS measurements and we know that their lungs were not infected. Since $(\mu, \pi)$ are defined for case only, they are not involved in the likelihood for controls, thus the likelihood function is:
+\begin{align*}
+ P(M_i^{BS} |\gamma, \delta) = & \prod_{k=1}^K \delta_k^{M_{ik}}(1-\delta_k)^{(1-M_{ik})}
+\end{align*}
+\\
+
+
+
+\subsection{The Joint Density}
+
+
+
+
+\end{document}
+
+
+%\begin{table}[htbp]
+%\begin{adjustwidth}{-0.5in}{-1in}
+%\resizebox{0.7\textwidth}{!}{\begin{minipage}{\textwidth}
+%\caption{Summary of the model coefficients and standard error estimates}
+%\label{tab: coef}
+%
+%\begin{tabular}{llllll|lllll} 
+%\hline 
+% \\
+%\hline \\
+%\end{tabular}
+%\end{minipage}}
+%\end{adjustwidth}
+%\end{table}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

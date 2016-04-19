@@ -110,6 +110,28 @@ ternplot + geom_density_tern(n = 150, aes(fill  = ..level.., alpha = ..level..))
 
 
 
+```{r}
+ternplot = ggtern(data = data.frame(mu_1 = rbeta(7000,0.5,0.5),
+                                 mu_2 = rbeta(7000,0.5,0.5),
+                                 mu_3 = rbeta(7000,0.5,0.5)),
+               aes(mu_1, mu_2, mu_3))
+ternplot + geom_density_tern(n = 150, aes(fill  = ..level.., alpha = ..level..)) +
+      geom_point(aes(alpha=0.3)) +
+      #geom_point(data = data.frame(mu_1=0.584, mu_2=0.298, mu_3=0.378), size=5) +
+      theme_rgbw(base_size = 26) +
+      labs(title = "Jeffreys Beta(1/2,1/2) Prior of Mu")    +
+      scale_fill_gradient(low = "blue",high = "red")  +
+      guides(color = "none", fill = "none", alpha = "none")
+
+```
+
+
+
+
+
+
+
+
 
 
 
