@@ -72,44 +72,11 @@ getLindex = function(Li, label)
 ################################### Reparameterization #################################
 ########################################################################################
 
-MuToTheta1 = function(Mu, Theta2, LUmat, MuMat, K, initvalue=NULL){
-      Eqt = function(theta1, mu=Mu, theta2=Theta2)
-      {
-            theta = matrix(c(theta1,theta2),ncol=1)
-            # potentials denotes the un-normalized probability
-            potentials = exp(LUmat%*%theta)
-            # A is the normalizing constant, i.e. sum of all potentials
-            A = sum(potentials) + 1
-            # k values of mu
-            values = as.vector(MuMat%*%potentials) - mu*A
-            values
-      }
-
-      if (length(initvalue)<K) initvalue = rep(0,K)
-
-      result = tryCatch( nleqslv(initvalue, fn=Eqt, method="Broyden",global="dbldog",xscalm="auto", 
-                                    control = list(maxit=3500,cndtol=1e-15,ftol=1e-10))$x , 
-                        error = function(c) "error solving for theta1 by nleqslv." )
-      if (is.character(result)){
-            print(result)
-            result = tryCatch( BBsolve(par=initvalue, fn=Eqt, quiet=TRUE, control=list(NM=FALSE))$par, 
-                        error = function(c) "error solving for theta1 by BBsolve." )
-            if(is.character(result)){
-                  stop(result)
-            }
-      }
-      #print(result$message)
-      return(result)
-}
-
-# dmat = AQE.DesignMatrix(3,3); lumat = cbind(dmat$Lmat, dmat$Umat); cellLabel = getCellLabel(3,dmat$Lmat)
-# MuToTheta1(Mu=c(0.3,0.9,0.7), Theta2=c(-1,-0.5, 0.8), cbind(dmat$Lmat, dmat$Umat), dmat$MuMat, K=3, initvalue=NULL)
-
-XbetaTologPrL = function(K, X.unique, Beta, theta2, lumat, mumat, theta1.init=NULL, normalize = TRUE){
+XbetaTologPrL = function(K, X.unique, Beta, theta2, lumat, normalize = TRUE){
       X.index = attr(X.unique, "index")
       Beta = matrix(Beta, ncol=K)
-      Mu.unique = inv.logit(X.unique%*%Beta)
-      theta1.unique = t(apply(Mu.unique, 1, function(x) { MuToTheta1(Mu=x, Theta2=theta2, lumat, mumat, K=K, initvalue=theta1.init) }) )
+      theta1.unique = X.unique%*%Beta
+
       if (normalize == TRUE) {
             cellprobs.unique = t(apply(theta1.unique, 1, function(x) {c(1, exp(lumat%*%c(x, theta2)))/(1+sum(exp(lumat%*%c(x, theta2))))} ) )
       } else if (normalize == FALSE) {
@@ -119,7 +86,7 @@ XbetaTologPrL = function(K, X.unique, Beta, theta2, lumat, mumat, theta1.init=NU
       }
       return(cellprobs.unique)
 }
-# XbetaTologPrL(K=3, X.unique, Beta, c(-1,-0.5, 0.8), lumat, dmat$MuMat, normalize=FALSE)
+# XbetaTologPrL(K=3, X.unique, Beta, c(-1,-0.5, 0.8), lumat, normalize=FALSE)
 
 
 ########################################################################################
@@ -152,18 +119,11 @@ AQE.simulate = function(K=3, Smax=3, P=c(0.5,0.2), N=50, Beta=NULL, theta2=c(-1,
       X.unique = uniquecombs(X)
       X.index = attr(X.unique, "index")
 
-      Mu.unique = inv.logit(X.unique%*%Beta)
-      theta1.unique = t(apply(Mu.unique, 1, function(x) { MuToTheta1(Mu=x, Theta2=theta2, lumat, dmat$MuMat, K=K, initvalue=NULL) }) )
+      theta1.unique = X.unique%*%Beta
       cellprobs.unique = t(apply(theta1.unique, 1, function(x) {c(1, exp(lumat%*%c(x, theta2)))/(1+sum(exp(lumat%*%c(x, theta2))))} ) )
 
-      # check compatibility
-      abs.err = norm( Mu.unique - t(apply(cellprobs.unique, 1, function(x) {dmat$MuMat%*%x[-1]} ) ) )
-      if (abs.err > tol){ 
-            message("Simulation error. Try again using compatible parameters or a different seed.")
-            return(list(abs.err=abs.err, Beta=Beta, Mu=Mu.unique, theta1=theta1.unique,cellprobs=cellprobs.unique))
-      }
-      # dmat$MuMat%*%(exp(lumat%*%c(theta1.unique[3,], theta2))/(1+sum(exp(lumat%*%c(theta1.unique[3,], theta2)))))
-      # 1/(1+sum(exp(lumat%*%c(theta1.unique[3,], theta2))))
+      
+      Mu.unique = t(apply(cellprobs.unique, 1, function(x) {dmat$MuMat%*%x[-1]} ) ) 
       
       L = t(sapply(X.index, function(x) {t(rmultinom(1,1,cellprobs.unique[x,]))%*%lmat.withZero } ) )
 
@@ -182,11 +142,11 @@ AQE.simulate = function(K=3, Smax=3, P=c(0.5,0.2), N=50, Beta=NULL, theta2=c(-1,
       MBS.case = LtoM(L, bs_tpr, bs_fpr)
       MBS.ctrl = t(matrix(rbinom(N*K, 1, bs_fpr), nrow=K))
 
-      return(list(X=X, Beta=Beta, L=L, MSS.case=MSS.case, MBS.case=MBS.case, MBS.ctrl=MBS.ctrl, abs.err=abs.err, cellprobs=cellprobs.unique))
+      return(list(X=X, Beta=Beta, L=L, MSS.case=MSS.case, MBS.case=MBS.case, MBS.ctrl=MBS.ctrl, Mu.unique = Mu.unique, cellprobs=cellprobs.unique))
 }
 # dmat = AQE.DesignMatrix(3,3); lumat = cbind(dmat$Lmat, dmat$Umat); cellLabel = getCellLabel(3,dmat$Lmat)
 # ss_tpr = c(0.05, 0.12, 0.08); bs_tpr = c(0.8,0.6, 0.7); bs_fpr = c(0.5, 0.55, 0.4)
-# Data = AQE.simulate(N=100, ss_tpr=ss_tpr, bs_tpr=bs_tpr, bs_fpr=bs_fpr, seed=12345)
+# Data = AQE.simulate(N=2000, ss_tpr=ss_tpr, bs_tpr=bs_tpr, bs_fpr=bs_fpr, seed=12345)
 
 
 
@@ -251,13 +211,13 @@ next_Lindex = function(K, Lmat.withZero, MSS, MBS.case, ss_tpr, bs_tpr, bs_fpr, 
 # next_Lindex(K, Lmat.withZero, Data$MSS.case, Data$MBS.case, ss_tpr, bs_tpr, bs_fpr, X.index, LU_Theta.unique)
 
 
-Hamiltonian_U = function(q, K, D, L.index, LUmat, MuMat, X.unique, hyperPars){
+Hamiltonian_U = function(q, K, D, L.index, LUmat, X.unique, hyperPars){
       Beta = matrix(q[1:(K*D)], nrow=D, ncol=K)
       Theta2 = q[-(1:(K*D))]
       X.index = attr(X.unique, "index")
 
-      U1.mat = XbetaTologPrL(K, X.unique, Beta, Theta2, LUmat, MuMat, theta1.init=NULL, normalize = "linear")
-      NormalizingConst = apply(U1.mat, 1, function(x) {sum(exp(x)) } )
+      U1.mat = XbetaTologPrL(K, X.unique, Beta, Theta2, LUmat, normalize = "linear")
+      NormalizingConst = as.vector(apply(U1.mat, 1, function(x) {sum(exp(x)) } ) )
 
       data.index = cbind(L.index, X.index)
       U1 = sum(apply(data.index, 1, function(x) {U1.mat[x[2], x[1]] - log(NormalizingConst[x[2]]) })) 
@@ -269,9 +229,9 @@ Hamiltonian_U = function(q, K, D, L.index, LUmat, MuMat, X.unique, hyperPars){
 # X.unique = uniquecombs(Data$X)
 # theta2=c(-1,-0.5, 0.8)
 # q = c(as.vector(Data$Beta), theta2)
-# U = function(q) { Hamiltonian_U(q, K=3, D=3, Lindex, lumat, dmat$MuMat, X.unique, hyperPars=data.frame(varbeta=20, vartheta=10, mutheta=-0.1, pmix=0.7)) }
+# U = function(q) { Hamiltonian_U(q, K=3, D=3, Lindex, lumat, X.unique, hyperPars=data.frame(varbeta=20, vartheta=10, mutheta=-0.1, pmix=1)) }
 # attr( numericDeriv(quote(U(q)), c("q")) , "gradient" ) -> g
-# optim(par=q, fn=U, method="BFGS")
+# optim(par=q, fn=U, method="BFGS", control=list(trace=2))
 
 
 HMC = function (U, epsilon, Nstep, current_q) {
@@ -310,7 +270,7 @@ HMC = function (U, epsilon, Nstep, current_q) {
             return (c(0,current_q)) # reject 
       }
 }
-# HMC(U, 0.01, 15, q)
+# HMC(U, 0.05, 5, q)
 
 # dmat = AQE.DesignMatrix(3,3); lumat = cbind(dmat$Lmat, dmat$Umat); cellLabel = getCellLabel(3,dmat$Lmat)
 # ss_tpr = c(0.05, 0.12, 0.08); bs_tpr = c(0.8,0.6, 0.7); bs_fpr = c(0.5, 0.55, 0.4)
@@ -381,8 +341,7 @@ GetPosterior = function(K, Smax, HasGS=FALSE,
       bs_fpr.posterior[1,] = ParInit$bs_fpr
 
 
-      LU_Theta.unique = XbetaTologPrL(K, X.unique, beta.posterior[1, ], theta2.posterior[1, ], LUmat, MuMat, 
-                              theta1.init=NULL, normalize = "linear")
+      LU_Theta.unique = XbetaTologPrL(K, X.unique, beta.posterior[1, ], theta2.posterior[1, ], LUmat, normalize = "linear")
       Lindex.chain[1, ] = next_Lindex(K, Lmat.withZero, MSS, MBS, ss_tpr.posterior[1,], 
                                     bs_tpr.posterior[1,], bs_fpr.posterior[1,], X.index, LU_Theta.unique)
 
@@ -403,7 +362,7 @@ GetPosterior = function(K, Smax, HasGS=FALSE,
 
             # (beta, theta2)
             current_q = c(beta.posterior[i-1, ], theta2.posterior[i-1, ])
-            U = function(q) { Hamiltonian_U(q, K, D, Lindex.chain[i-1,], LUmat, MuMat, X.unique, hyperPars=BetaThetaPar) }
+            U = function(q) { Hamiltonian_U(q, K, D, Lindex.chain[i-1,], LUmat, X.unique, hyperPars=BetaThetaPar) }
             parm.b = tryCatch( HMC(U, epsilon, Nstep, current_q), error = function(c) "Incompatible Hamiltonian Proposal. Reject." )
             if (is.character(parm.b)){
                   print(paste0(i, ": ", parm.b))
@@ -419,8 +378,7 @@ GetPosterior = function(K, Smax, HasGS=FALSE,
 
             # L
             if (accept_track[i]>0) {
-                  LU_Theta.unique = XbetaTologPrL(K, X.unique, beta.posterior[i, ], theta2.posterior[i, ], LUmat, MuMat, 
-                              theta1.init=NULL, normalize = "linear")
+                  LU_Theta.unique = XbetaTologPrL(K, X.unique, beta.posterior[i, ], theta2.posterior[i, ], LUmat, normalize = "linear")
             }
             Lindex.chain[i, ] = next_Lindex(K, Lmat.withZero, MSS, MBS, ss_tpr.posterior[i,], 
                                     bs_tpr.posterior[i,], bs_fpr.posterior[i,], X.index, LU_Theta.unique)
@@ -453,8 +411,8 @@ GetPosterior = function(K, Smax, HasGS=FALSE,
 # Data = AQE.simulate(N=500, ss_tpr=ss_tpr, bs_tpr=bs_tpr, bs_fpr=bs_fpr, seed=12345)
 # PAR0 = list(beta=as.vector(Data$Beta), theta2 = theta2, ss_tpr=ss_tpr, bs_tpr=bs_tpr, bs_fpr=bs_fpr)
 # HYPAR = list(a=rep(1,K), b=rep(10,K), c=rep(2,K), d=rep(1,K), e=rep(1,K), f=rep(1,K), 
-#             varbeta=20, vartheta=15, mutheta=-0.1, pmix=0.7)
-# ctrlpar = data.frame(burnin=1, iter=1000, epsilon=0.02, Nstep=7)
+#             varbeta=20, vartheta=15, mutheta=-0.1, pmix=1)
+# ctrlpar = data.frame(burnin=1, iter=1000, epsilon=0.03, Nstep=5)
 # tmp = GetPosterior(K=3, Smax=3, DataList=Data, ParInit=PAR0, HyperPar=HYPAR, Control=ctrlpar)
 
 # round(as.vector(Data$Beta),3)
@@ -522,7 +480,7 @@ GetEMsolution = function(K, Smax, HasGS=FALSE,
 
       GetQfunc = function(THETA, THETA_old){
             LU_Theta.unique_old = XbetaTologPrL(K, X.unique, THETA_old[Beta_index], THETA_old[theta2_index], 
-                                    LUmat, MuMat, theta1.init=NULL, normalize = "linear")
+                                    LUmat, normalize = "linear")
             log_ProbMat.a = log_ProbMat_MSSBSgivenL(K, Lmat.withZero, MSS, MBS, 
                               THETA_old[ss_tpr_index], THETA_old[bs_tpr_index], THETA_old[bs_fpr_index])
             log_ProbMat.b = LU_Theta.unique_old[X.index,]
@@ -531,7 +489,7 @@ GetEMsolution = function(K, Smax, HasGS=FALSE,
             ProbMat_old = ProbMat/NormalizingConst_old
 
             LU_Theta.unique = XbetaTologPrL(K, X.unique, THETA[Beta_index], THETA[theta2_index], 
-                                    LUmat, MuMat, theta1.init=NULL, normalize = "linear")
+                                    LUmat, normalize = "linear")
             NormalizingConst = as.vector(apply(exp(LU_Theta.unique), 1, sum))
             log_ProbMat.a = log_ProbMat_MSSBSgivenL(K, Lmat.withZero, MSS, MBS, 
                               THETA[ss_tpr_index], THETA[bs_tpr_index], THETA[bs_fpr_index])
@@ -549,6 +507,25 @@ GetEMsolution = function(K, Smax, HasGS=FALSE,
       Qvalue_track = rep(NA, maxiter)
       Qvalue_track[1] = Inf
 
+
+      log_JointDist = function(THETA){
+            Prob_L.unique = XbetaTologPrL(K, X.unique, THETA[Beta_index], THETA[theta2_index], 
+                  LUmat, normalize = TRUE)
+      
+            ProbMat.M_L = exp(log_ProbMat_MSSBSgivenL(K, Lmat.withZero, MSS, MBS, 
+                  THETA[ss_tpr_index], THETA[bs_tpr_index], THETA[bs_fpr_index]))
+            ProbMat.L = Prob_L.unique[X.index,]
+
+            Prob_M = as.vector(apply(ProbMat.M_L * ProbMat.L, 1, sum))
+
+            log_Prob_case = sum(log(Prob_M), na.rm=TRUE)
+            log_Prob = log_Prob_case + log_Prob_ctrl(K, N.ctrl, MBS.ctrl, THETA[bs_fpr_index]) + 
+            Prior.BetaTheta2(THETA[Beta_index], THETA[theta2_index], 
+                  varbeta=varbeta, vartheta=vartheta, mutheta=mutheta, pmix=pmix, logscale=TRUE) +
+            sum(dbeta(x=THETA[-(1:(K*D + choose(K,2)))], shape1=c(aa,cc,ee), shape2=c(bb,dd,ff), log=TRUE))
+            return(-log_Prob)      
+      }
+
       logProb_track = rep(NA, maxiter)
       logProb_track[1] = log_JointDist(THETA.track[1,])
 
@@ -559,7 +536,7 @@ GetEMsolution = function(K, Smax, HasGS=FALSE,
             }
             # M-step
             print(paste0(i, ": Optimizing Q function..."))
-            M.result = optim(par=THETA.track[i-1,], fn=current_Q, method="Nelder", control=list(trace=1))
+            M.result = optim(par=THETA.track[i-1,], fn=current_Q, method="BFGS", control=list(trace=1))
             THETA.track[i,] = M.result$par
             Qvalue_track[i] = M.result$value
             logProb_track[i] = log_JointDist(THETA.track[i,])
@@ -580,10 +557,10 @@ GetEMsolution = function(K, Smax, HasGS=FALSE,
 }
 
 # ctrlpar = data.frame(maxiter=100, tol=1e-5)
-#tmp = GetEMsolution(K=3, Smax=3, DataList=Data, ParInit=PAR0, HyperPar=HYPAR, Control=ctrlpar)
+# tmp2 = GetEMsolution(K=3, Smax=3, DataList=Data, ParInit=PAR0, HyperPar=HYPAR, Control=ctrlpar)
 log_JointDist = function(THETA){
       Prob_L.unique = XbetaTologPrL(K, X.unique, THETA[Beta_index], THETA[theta2_index], 
-            LUmat, MuMat, theta1.init=NULL, normalize = TRUE)
+            LUmat, normalize = TRUE)
       
       ProbMat.M_L = exp(log_ProbMat_MSSBSgivenL(K, Lmat.withZero, MSS, MBS, 
             THETA[ss_tpr_index], THETA[bs_tpr_index], THETA[bs_fpr_index]))
@@ -653,7 +630,7 @@ DirectMAP = function(K, Smax, HasGS=FALSE,
 
       log_JointDist = function(THETA){
             Prob_L.unique = XbetaTologPrL(K, X.unique, THETA[Beta_index], THETA[theta2_index], 
-                                    LUmat, MuMat, theta1.init=NULL, normalize = TRUE)
+                                    LUmat, normalize = TRUE)
             
             ProbMat.M_L = exp(log_ProbMat_MSSBSgivenL(K, Lmat.withZero, MSS, MBS, 
                               THETA[ss_tpr_index], THETA[bs_tpr_index], THETA[bs_fpr_index]))
@@ -673,5 +650,5 @@ DirectMAP = function(K, Smax, HasGS=FALSE,
       return(M.result)
 }
 
-#tmp =DirectMAP(K=3, Smax=3, DataList=Data, ParInit=PAR0, HyperPar=HYPAR, Control=ctrlpar)
+# tmp3 =DirectMAP(K=3, Smax=3, DataList=Data, ParInit=PAR0, HyperPar=HYPAR, Control=ctrlpar)
 

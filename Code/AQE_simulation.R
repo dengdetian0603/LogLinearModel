@@ -8,7 +8,7 @@ library(BB)
 library(mgcv)
 
 sourceCpp("/home/bst/student/ddeng/ThesisTopic/LogLinearModel/GitRepo/LogLinearModel/Code/AQE_Components.cpp")
-source("/home/bst/student/ddeng/ThesisTopic/LogLinearModel/GitRepo/LogLinearModel/Code/AQE_models_marginal.R")
+source("/home/bst/student/ddeng/ThesisTopic/LogLinearModel/GitRepo/LogLinearModel/Code/AQE_models_conditional.R")
 #---------------------------------------------------------------------------
 K=5; Smax=4
 dmat = AQE.DesignMatrix(5,4)
