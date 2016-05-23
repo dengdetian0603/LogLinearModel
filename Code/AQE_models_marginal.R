@@ -46,7 +46,14 @@ AQE.DesignMatrix = function(K, Smax=3){
       {
             MuMat[i,] = as.numeric(Lmat[,i]==1)
       }
-      return(list(Lmat=Lmat, Umat=Umat, MuMat=MuMat, J1=index[Smax]))
+
+      PiMat = matrix(NA,nrow=Smax,ncol=index[Smax])
+      S = apply(Lmat, 1, sum)
+      for (i in 1:Smax)
+      {
+            PiMat[i,] = as.numeric(S==i)
+      }
+      return(list(Lmat=Lmat, Umat=Umat, MuMat=MuMat, J1=index[Smax], PiMat=PiMat))
 }
 # AQE.DesignMatrix(5,3)
 # dim(AQE.DesignMatrix(30,4))
@@ -137,6 +144,8 @@ AQE.simulate = function(K=3, Smax=3, P=c(0.5,0.2), N=50, Beta=NULL, theta2=c(-1,
       lumat = cbind(dmat$Lmat, dmat$Umat)
       lmat.withZero = rbind(rep(0,K), dmat$Lmat)
 
+      dmat_full = AQE.DesignMatrix(K,K)
+
       if (length(Beta)<1 & D == 3) {
             Beta = matrix(NA, nrow=D, ncol=K)
             mu0 = c(0.3,0.45,0.2, 0.7, 0.2)
@@ -183,7 +192,9 @@ AQE.simulate = function(K=3, Smax=3, P=c(0.5,0.2), N=50, Beta=NULL, theta2=c(-1,
       MBS.case = LtoM(L, bs_tpr, bs_fpr)
       MBS.ctrl = t(matrix(rbinom(N*K, 1, bs_fpr), nrow=K))
 
-      return(list(X=X, Beta=Beta, L=L, MSS.case=MSS.case, MBS.case=MBS.case, MBS.ctrl=MBS.ctrl, abs.err=abs.err, cellprobs=cellprobs.unique))
+      return(list(X=X, Beta=Beta, L=L, MSS.case=MSS.case, MBS.case=MBS.case, MBS.ctrl=MBS.ctrl, 
+            abs.err=abs.err, cellprobs=cellprobs.unique, Mu=Mu.unique, 
+            Pi=cellprobs.unique%*%t(cbind(rep(0,Smax),dmat$PiMat) )))
 }
 # dmat = AQE.DesignMatrix(3,3); lumat = cbind(dmat$Lmat, dmat$Umat); cellLabel = getCellLabel(3,dmat$Lmat)
 # ss_tpr = c(0.05, 0.12, 0.08); bs_tpr = c(0.8,0.6, 0.7); bs_fpr = c(0.5, 0.55, 0.4)
@@ -600,7 +611,7 @@ log_JointDist = function(THETA){
       return(-log_Prob)      
 }
 
-
+## Using Cpp code
 EM_update = function(par, K, D, Lmat.withZero, MSS, MBS, MBS.ctrl, X.index, X.unique, 
                      LUmat, N.case, N.ctrl, aa, bb, cc, dd, ee, ff, varbeta, vartheta, mutheta){
 	old_beta = par[(1:(K*D))+3*K]

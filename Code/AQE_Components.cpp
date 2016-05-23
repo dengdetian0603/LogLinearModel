@@ -11,7 +11,7 @@ using namespace Rcpp;
 typedef matrix<double,0,1> column_vector;
 
 // [[Rcpp::export]]
-double log_Prob_MSSBSigivenLj(int& K, NumericVector& MSSi, NumericVector& MBSi, IntegerVector& Lj, 
+double log_Prob_MSSBSigivenLj(const int& K, NumericVector& MSSi, NumericVector& MBSi, IntegerVector& Lj, 
       NumericVector& ss_tpr, NumericVector& bs_tpr, NumericVector& bs_fpr){
       double log_probs = 0.0;
       for(int k=0; k<K; ++k){
@@ -28,8 +28,8 @@ double log_Prob_MSSBSigivenLj(int& K, NumericVector& MSSi, NumericVector& MBSi, 
 }
 
 // [[Rcpp::export]]
-NumericMatrix log_ProbMat_MSSBSgivenL(int& K, IntegerMatrix& Lall_matrix,  NumericMatrix& MSS, NumericMatrix& MBS,
-      NumericVector& ss_tpr, NumericVector& bs_tpr, NumericVector& bs_fpr){
+NumericMatrix log_ProbMat_MSSBSgivenL(const int& K, IntegerMatrix& Lall_matrix,  NumericMatrix& MSS, 
+                  NumericMatrix& MBS, NumericVector& ss_tpr, NumericVector& bs_tpr, NumericVector& bs_fpr){
       int J = Lall_matrix.nrow();
       int N = MSS.nrow();
 
@@ -49,7 +49,7 @@ NumericMatrix log_ProbMat_MSSBSgivenL(int& K, IntegerMatrix& Lall_matrix,  Numer
 
 /* ------------ log Likelihood for Control data ----------- */
 // [[Rcpp::export]]
-double log_Prob_ctrl(int& K, int& Nctrl, NumericMatrix& Mbs, NumericVector& bs_fpr){
+double log_Prob_ctrl(const int& K, const int& Nctrl, NumericMatrix& Mbs, NumericVector& bs_fpr){
       double log_prob_sum = 0.0;
 
       for(int i=0; i<Nctrl; ++i){
@@ -292,6 +292,23 @@ NumericMatrix XbetaToProbL_unique(int& K, int& J1, NumericMatrix& X_unique, Nume
 // XbetaToProbL_unique(5, 31, X.unique, as.vector(Data$Beta), theta2, LUmat, 1)        
 
 
+double log_Prior_BetaTheta2(NumericVector& Beta, NumericVector& Theta2, 
+                              const double& var_beta, const double& var_theta2, const double& mean_theta2)
+{
+      double result = 0.0;
+      for (int k=0; k<Beta.size(); ++k){
+            result -= (Beta(k)*Beta(k))/(2*var_beta);
+      }
+      for (int k=0; k<Theta2.size(); ++k){
+            result -= pow(Theta2(k)-mean_theta2, 2)/(2*var_theta2);
+      }
+      return result;
+}
+
+
+/* --------------------------------------- EM components --------------------------------------------*/
+
+
 // [[Rcpp::export]]
 NumericMatrix EM_UpdateRates(int& K, int& J1, int& N_case, int& N_ctrl, IntegerMatrix& MSS, IntegerMatrix& MBS_case, 
                         IntegerMatrix & MBS_ctrl, NumericMatrix& weights, IntegerVector& X_index, IntegerMatrix& Lmat_withZero,
@@ -420,18 +437,6 @@ NumericMatrix XbetaToProbL_unique(const int& K, const int& J1, const NumericMatr
 }  
 
 
-double log_Prior_BetaTheta2(NumericVector& Beta, NumericVector& Theta2, 
-                              const double& var_beta, const double& var_theta2, const double& mean_theta2)
-{
-      double result = 0.0;
-      for (int k=0; k<Beta.size(); ++k){
-            result -= (Beta(k)*Beta(k))/(2*var_beta);
-      }
-      for (int k=0; k<Theta2.size(); ++k){
-            result -= pow(Theta2(k)-mean_theta2, 2)/(2*var_theta2);
-      }
-      return result;
-}
 
 
 class Qfunction
@@ -475,7 +480,11 @@ public:
                   try {      
                         qUnique = XbetaToProbL_unique(this->K, this->J1, this->x_unique, Beta, Theta2, this->lumat, 3);
                   }
-                  catch(...) {cout << "Error in solving Theta1." << endl; ++iter; continue;}
+                  catch(...) {
+                        //cout << "Error in solving Theta1." << endl; 
+                        ++iter; 
+                        continue;
+                  }
 
                   Qfunc_1 = 0.0;
                   for (int i=0; i<this->x_index.size(); ++i){
@@ -580,12 +589,177 @@ column_vector EM_UpdateBetaTheta2(NumericMatrix& Weights, IntegerVector& X_index
 }
 
 
+/* ------------------------------------------------------------------------------------------------------- */
+
+class log_full_distn
+{
+public:
+      typedef ::column_vector column_vector;
+      log_full_distn( const IntegerVector& X_index, const NumericMatrix& X_unique,
+                  const IntegerMatrix& LUmat, const int& K, const int& J1, const int& D, IntegerMatrix& L_withZero_mat,
+                  NumericMatrix& MSS, NumericMatrix& MBS, NumericMatrix& MBS_ctrl,
+                  const double& prior_var_beta, const double& prior_var_theta2, const double& prior_mean_theta2, 
+                  const NumericVector& aa, const NumericVector& bb, const NumericVector& cc, const NumericVector& dd, 
+                  const NumericVector& ee, const NumericVector& ff)
+      {
+              this->x_index = X_index; // index starts from 0
+              this->lumat = LUmat;
+              this->x_unique = X_unique;
+              this->K = K;
+              this->J1 = J1;
+              this->D = D; // number of covariates + 1(intercept)
+              this->Lmat_withZero = L_withZero_mat;
+              this->mss = MSS;
+              this->mbs = MBS;
+              this->mbs_ctrl = MBS_ctrl;
+
+              this->Beta_size = D*K;
+              this->Theta2_size = LUmat.ncol()-K;
+              this->vbeta = prior_var_beta;
+              this->vtheta2 = prior_var_theta2;
+              this->mtheta2 = prior_mean_theta2;
+
+              this->aa = aa;
+              this->bb = bb;
+              this->cc = cc;
+              this->dd = dd;
+              this->ee = ee;
+              this->ff = ff;
+      }
+
+      double operator() ( const column_vector& All_Par)
+      {                  
+            NumericVector ss_tpr(this->K);
+            for (int k=0; k<this->K; ++k){
+                  ss_tpr(k) = All_Par(k);
+            }
+            NumericVector bs_tpr(this->K);
+            for (int k=0; k<this->K; ++k){
+                  bs_tpr(k) = All_Par(k+this->K);
+            }
+            NumericVector bs_fpr(this->K);
+            for (int k=0; k<this->K; ++k){
+                  bs_fpr(k) = All_Par(k+this->K*2);
+            }
+
+            NumericVector Beta(this->Beta_size);
+            for (int k=0; k<this->Beta_size; ++k){
+                  Beta(k) = All_Par(k+this->K*3);
+            }
+            NumericVector Theta2(this->Theta2_size);
+            for (int k=0; k<this->Theta2_size; ++k){
+                  Theta2(k) = All_Par(this->Beta_size + this->K*3 + k);
+            }
+
+            NumericMatrix log_ProbMat_MgivenL(this->mss.nrow(), this->J1+1);
+            log_ProbMat_MgivenL = log_ProbMat_MSSBSgivenL(this->K, this->Lmat_withZero,  this->mss, this->mbs,
+                                    ss_tpr, bs_tpr, bs_fpr);
 
 
+            NumericMatrix Prob_L_unique(this->mss.nrow(), this->J1+1);
+
+            double log_case = -1e+26;
+            int iter = 0;
+            while( (abs(log_case) > 1e+25) && iter <10){ 
+                  // unstable step to get qUnique   
+                  try {      
+                        Prob_L_unique = XbetaToProbL_unique(this->K, this->J1, this->x_unique, Beta, Theta2, this->lumat, 1);
+                  }
+                  catch(...) {
+                        //cout << "Error in solving Theta1." << endl; 
+                        ++iter; 
+                        continue;
+                  }
+
+                  log_case = 0.0;
+                  for (int i=0; i<this->x_index.size(); ++i){
+                        double lik_i = 0;
+                        for (int j=0; j<this->J1+1; ++j){
+                              lik_i += Prob_L_unique(this->x_index(i),j) * exp(log_ProbMat_MgivenL(i, j));
+                        }
+                        log_case += log(lik_i);
+                  }
+                  ++iter;
+            }
+
+            double rates_logprior = 0.0;
+            for (int k=0; k< this->K; ++k){
+                  rates_logprior += (this->aa(k)-1)*log(ss_tpr(k)) + (this->bb(k)-1)*log(1-ss_tpr(k)) + 
+                                    (this->cc(k)-1)*log(bs_tpr(k)) + (this->dd(k)-1)*log(1-bs_tpr(k)) + 
+                                    (this->ee(k)-1)*log(bs_fpr(k)) + (this->ff(k)-1)*log(1-bs_fpr(k));
+            }
+            return log_case + log_Prob_ctrl(this->K, this->mbs_ctrl.nrow(), this->mbs_ctrl, bs_fpr)+ 
+                    rates_logprior + log_Prior_BetaTheta2(Beta, Theta2, vbeta, vtheta2, mtheta2);    
+      }
+
+private:
+      IntegerVector x_index;
+      IntegerMatrix lumat;
+      NumericMatrix x_unique;
+      IntegerMatrix Lmat_withZero;
+      NumericMatrix mss;
+      NumericMatrix mbs;
+      NumericMatrix mbs_ctrl;
+      NumericMatrix ss_tpr;
+      NumericMatrix bs_tpr;
+      NumericMatrix bs_fpr;
+      int K;
+      int J1;
+      int D;
+      int Beta_size;
+      int Theta2_size;
+      double vbeta;
+      double vtheta2;
+      double mtheta2;
+      NumericVector aa;
+      NumericVector bb;
+      NumericVector cc;
+      NumericVector dd;
+      NumericVector ee;
+      NumericVector ff;
+};
 
 
+// [[Rcpp::export]]
+double Evaluate_log_distn(NumericVector& all_par, const IntegerVector& X_index, const NumericMatrix& X_unique,
+                  const IntegerMatrix& LUmat, const int& K, const int& J1, const int& D, IntegerMatrix& L_withZero_mat,
+                  NumericMatrix& MSS, NumericMatrix& MBS, NumericMatrix& MBS_ctrl,
+                  const double& prior_var_beta, const double& prior_var_theta2, const double& prior_mean_theta2, 
+                  const NumericVector& aa, const NumericVector& bb, const NumericVector& cc, const NumericVector& dd, 
+                  const NumericVector& ee, const NumericVector& ff)
+{     
+      log_full_distn logD( X_index, X_unique, LUmat, K, J1, D, L_withZero_mat, 
+                   MSS, MBS, MBS_ctrl, prior_var_beta, prior_var_theta2, prior_mean_theta2, 
+                   aa, bb, cc, dd, ee, ff);
+
+      column_vector x(all_par.size());
+      for (int k=0; k< all_par.size(); ++k){
+            x(k) = all_par(k);
+      }
+      return logD(x);
+}
 
 
+// column_vector Maximize_Posterior(NumericVector initial_value, const IntegerVector& X_index, const NumericMatrix& X_unique,
+//                   const IntegerMatrix& LUmat, const int& K, const int& J1, const int& D, IntegerMatrix& L_withZero_mat,
+//                   NumericMatrix& MSS, NumericMatrix& MBS, NumericMatrix& MBS_ctrl,
+//                   const double& prior_var_beta, const double& prior_var_theta2, const double& prior_mean_theta2, 
+//                   const NumericVector& aa, const NumericVector& bb, const NumericVector& cc, const NumericVector& dd, 
+//                   const NumericVector& ee, const NumericVector& ff)
+// {
+//       int Par_size = initial_value.size();
+//       column_vector starting_point(Par_size);
+//       for (int k=0; k<Par_size; ++k){
+//             starting_point(k) = initial_value(k);
+//       }
+
+//       find_max_using_approximate_derivatives(bfgs_search_strategy(), objective_delta_stop_strategy(1e-8),
+//             log_full_distn(X_index, X_unique, LUmat, K, J1, D, L_withZero_mat, 
+//                    MSS, MBS, MBS_ctrl, prior_var_beta, prior_var_theta2, prior_mean_theta2, 
+//                    aa, bb, cc, dd, ee, ff), 
+//             starting_point, 0.0, 1e-9);
+//       return starting_point;
+// }
 
 
 
