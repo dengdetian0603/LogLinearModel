@@ -8,7 +8,7 @@ library(BB)
 library(mgcv)
 
 #sourceCpp("/home/bst/student/ddeng/ThesisTopic/LogLinearModel/GitRepo/LogLinearModel/Code/AQE_Components.cpp")
-sourceCpp("/Users/dengdetian0603/Documents/JHSPH/Research/S.Zeger/LogLinearModel/Code/AQE_Components.cpp")
+#sourceCpp("/Users/dengdetian0603/Documents/JHSPH/Research/S.Zeger/LogLinearModel/Code/AQE_Components.cpp")
 #---------------------------------------------------------------------------
 logit = function(x)
 {
@@ -192,7 +192,7 @@ AQE.simulate = function(K=3, Smax=3, P=c(0.5,0.2), N=50, Beta=NULL, theta2=c(-1,
       MBS.case = LtoM(L, bs_tpr, bs_fpr)
       MBS.ctrl = t(matrix(rbinom(N*K, 1, bs_fpr), nrow=K))
 
-      return(list(X=X, Beta=Beta, L=L, MSS.case=MSS.case, MBS.case=MBS.case, MBS.ctrl=MBS.ctrl, 
+      return(list(SEED=seed, X=X, Beta=Beta, L=L, MSS.case=MSS.case, MBS.case=MBS.case, MBS.ctrl=MBS.ctrl, 
             abs.err=abs.err, cellprobs=cellprobs.unique, Mu=Mu.unique, 
             Pi=cellprobs.unique%*%t(cbind(rep(0,Smax),dmat$PiMat) )))
 }
@@ -617,12 +617,12 @@ EM_update = function(par, K, D, Lmat.withZero, MSS, MBS, MBS.ctrl, X.index, X.un
 	old_beta = par[(1:(K*D))+3*K]
       old_theta2 = par[-(1:(K*(D+3)))]
 
-      print("E-step")
+      #print("E-step")
       W = EM_GetWeights(K, Lmat.withZero, MSS, MBS, par[1:K], par[(1:K)+K], par[(1:K)+2*K], 
                   X.index-1, X.unique, LUmat, old_beta, old_theta2)
       new_rates = EM_UpdateRates(K, nrow(LUmat), N.case, N.ctrl, MSS, MBS, MBS.ctrl, W, X.index-1, Lmat.withZero,
                aa, bb, cc, dd, ee, ff)
-      print("M-step")
+      #print("M-step")
       new_par = EM_UpdateBetaTheta2(W, X.index-1, X.unique, LUmat, K, nrow(LUmat), D,
                     varbeta, vartheta, mutheta, par[-(1:(3*K))])
       return (c(new_rates[1,], new_rates[2,], new_rates[3,], new_par))
