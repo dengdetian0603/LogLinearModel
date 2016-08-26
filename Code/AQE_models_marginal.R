@@ -39,7 +39,7 @@ AQE.DesignMatrix = function(K, Smax=3){
             row1 = index[s]+1
       }
 
-      Umat = t(apply(Lmat, 1, function(l) apply(combn(l,2),2,prod)))
+      Umat = matrix(t(apply(Lmat, 1, function(l) apply(combn(l,2),2,prod))), ncol=choose(K,2))
 
       MuMat = matrix(NA,nrow=K,ncol=index[Smax])
       for (i in 1:K)
@@ -134,30 +134,42 @@ XbetaTologPrL = function(K, X.unique, Beta, theta2, lumat, mumat, theta1.init=NU
 ################################### Simulation Tools ###################################
 ########################################################################################
 
-AQE.simulate = function(K=3, Smax=3, P=c(0.5,0.2), N=50, Beta=NULL, theta2=c(-1,-0.5, 0.8), 
+AQE.simulate = function(K=3, Smax=3, P=c(0.5,0.5), N=50, Beta=NULL, theta2=c(-1,-0.5, 0.8), 
                                     ss_tpr, bs_tpr, bs_fpr, seed = 123, tol=1e-8) 
 {
       set.seed(seed)
-
-      D = length(P) + 1
+      if (length(Beta)>0) {
+            D = nrow(Beta)
+            P = rep(0.5, D-1)
+      } else {
+            D = length(P) + 1
+      }
+      
       dmat = AQE.DesignMatrix(K,Smax)
       lumat = cbind(dmat$Lmat, dmat$Umat)
       lmat.withZero = rbind(rep(0,K), dmat$Lmat)
 
       dmat_full = AQE.DesignMatrix(K,K)
-
-      if (length(Beta)<1 & D == 3) {
-            Beta = matrix(NA, nrow=D, ncol=K)
-            mu0 = c(0.3,0.45,0.2, 0.7, 0.2)
+      
+      if (length(Beta)<1 & D<=3) {
+            Beta = matrix(NA, nrow=3, ncol=K)
+            mu0 = c(0.3,0.65,0.2, 0.6, 0.2)
             Beta[1,] = logit(mu0[1:K])
             Beta[2,] = rbinom(K,1,0.5)-0.5
             Beta[3,] = rbinom(K,1,0.4)*0.5
       }
+      Beta = Beta[1:D,1:K]
+      theta2 = theta2[1:choose(K,2)]
+      ss_tpr = ss_tpr[1:K]
+      bs_tpr = bs_tpr[1:K]
+      bs_fpr = bs_fpr[1:K]
 
       X = matrix(NA, nrow=N, ncol=D)
       X[,1] = 1
-      for (p in 2:D) {
-            X[,p] = rbinom(N, 1, P[p-1])
+      if (D>1)
+      {      for (p in 2:D) {
+                  X[,p] = rbinom(N, 1, P[p-1])
+            }
       }
       X.unique = uniquecombs(X)
       X.index = attr(X.unique, "index")
@@ -613,20 +625,85 @@ log_JointDist = function(THETA){
 
 ## Using Cpp code
 EM_update = function(par, K, D, Lmat.withZero, MSS, MBS, MBS.ctrl, X.index, X.unique, 
-                     LUmat, N.case, N.ctrl, aa, bb, cc, dd, ee, ff, varbeta, vartheta, mutheta){
+                     LUmat, N.case, N.ctrl, aa, bb, cc, dd, ee, ff, varbeta, vartheta, mutheta,
+                     fix_rate=FALSE, Rates0=NULL){
 	old_beta = par[(1:(K*D))+3*K]
       old_theta2 = par[-(1:(K*(D+3)))]
 
       #print("E-step")
       W = EM_GetWeights(K, Lmat.withZero, MSS, MBS, par[1:K], par[(1:K)+K], par[(1:K)+2*K], 
                   X.index-1, X.unique, LUmat, old_beta, old_theta2)
-      new_rates = EM_UpdateRates(K, nrow(LUmat), N.case, N.ctrl, MSS, MBS, MBS.ctrl, W, X.index-1, Lmat.withZero,
-               aa, bb, cc, dd, ee, ff)
+      if (fix_rate)
+      {
+            new_rates = EM_UpdateRates_fixSS(K, nrow(LUmat), N.case, N.ctrl, MSS, MBS, MBS.ctrl, W, X.index-1, Lmat.withZero,
+                  aa, bb, cc, dd, ee, ff)
+            if (length(Rates0)>K-1) new_rates[1,] = Rates0
+      } else {
+            new_rates = EM_UpdateRates(K, nrow(LUmat), N.case, N.ctrl, MSS, MBS, MBS.ctrl, W, X.index-1, Lmat.withZero,
+                  aa, bb, cc, dd, ee, ff)
+      }
       #print("M-step")
       new_par = EM_UpdateBetaTheta2(W, X.index-1, X.unique, LUmat, K, nrow(LUmat), D,
                     varbeta, vartheta, mutheta, par[-(1:(3*K))])
       return (c(new_rates[1,], new_rates[2,], new_rates[3,], new_par))
 }
+
+
+## Using Cpp code
+EM_update_exch = function(par, K, D, Lmat.withZero, MSS, MBS, MBS.ctrl, X.index, X.unique, 
+                     LUmat, N.case, N.ctrl, aa, bb, cc, dd, ee, ff, varbeta, vartheta, mutheta,
+                     fix_rate=FALSE, Rates0=NULL){
+      old_beta = par[(1:(K*D))+3*K]
+      old_theta2 = rep(par[-(1:(K*(D+3)))], choose(K,2))
+
+      #print("E-step")
+      W = EM_GetWeights(K, Lmat.withZero, MSS, MBS, par[1:K], par[(1:K)+K], par[(1:K)+2*K], 
+                  X.index-1, X.unique, LUmat, old_beta, old_theta2)
+      if (fix_rate)
+      {
+            new_rates = EM_UpdateRates_fixSS(K, nrow(LUmat), N.case, N.ctrl, MSS, MBS, MBS.ctrl, W, X.index-1, Lmat.withZero,
+                  aa, bb, cc, dd, ee, ff)
+            if (length(Rates0)>K-1) new_rates[1,] = Rates0
+      } else {
+            new_rates = EM_UpdateRates(K, nrow(LUmat), N.case, N.ctrl, MSS, MBS, MBS.ctrl, W, X.index-1, Lmat.withZero,
+                  aa, bb, cc, dd, ee, ff)
+      }
+      #print("M-step")
+      new_par = EM_UpdateBetaTheta2_exch(W, X.index-1, X.unique, LUmat, K, nrow(LUmat), D,
+                    varbeta, vartheta, mutheta, par[-(1:(3*K))])
+      return (c(new_rates[1,], new_rates[2,], new_rates[3,], new_par))
+}
+
+## Using Cpp code
+EM_update_exch_UpdateBetaWithBSonly = function(par, K, D, Lmat.withZero, MSS, MBS, MBS.ctrl, X.index, X.unique, 
+                     LUmat, N.case, N.ctrl, aa, bb, cc, dd, ee, ff, varbeta, vartheta, mutheta,
+                     fix_rate=FALSE, Rates0=NULL){
+      old_beta = par[(1:(K*D))+3*K]
+      old_theta2 = rep(par[-(1:(K*(D+3)))], choose(K,2))
+
+      #print("E-step")
+      W = EM_GetWeights(K, Lmat.withZero, MSS, MBS, par[1:K], par[(1:K)+K], par[(1:K)+2*K], 
+                  X.index-1, X.unique, LUmat, old_beta, old_theta2)
+
+      W2 = EM_GetWeights_BSonly(K, Lmat.withZero, MBS, par[(1:K)+K], par[(1:K)+2*K], 
+                  X.index-1, X.unique, LUmat, old_beta, old_theta2)
+
+      #print("M-step")
+      if (fix_rate)
+      {
+            new_rates = EM_UpdateRates_fixSS(K, nrow(LUmat), N.case, N.ctrl, MSS, MBS, MBS.ctrl, W, X.index-1, Lmat.withZero,
+                  aa, bb, cc, dd, ee, ff)
+            if (length(Rates0)>K-1) new_rates[1,] = Rates0
+      } else {
+            new_rates = EM_UpdateRates(K, nrow(LUmat), N.case, N.ctrl, MSS, MBS, MBS.ctrl, W, X.index-1, Lmat.withZero,
+                  aa, bb, cc, dd, ee, ff)
+      }
+      new_par = EM_UpdateBetaTheta2_exch(W2, X.index-1, X.unique, LUmat, K, nrow(LUmat), D,
+                    varbeta, vartheta, mutheta, par[-(1:(3*K))])
+      return (c(new_rates[1,], new_rates[2,], new_rates[3,], new_par))
+}
+
+
 
 
 ########################################################################################

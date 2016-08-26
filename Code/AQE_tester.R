@@ -12,7 +12,7 @@ source("/Users/dengdetian0603/Documents/JHSPH/Research/S.Zeger/LogLinearModel/Co
 #register()
 
 #---------------------------------------------------------------------------
-K=5; Smax=4
+K=5; Smax=5
 dmat = AQE.DesignMatrix(K,Smax)
 cellLabel = getCellLabel(K,dmat$Lmat)
 
@@ -20,11 +20,17 @@ ss_tpr = c(0.05, 0.12, 0.08, 0.15, 0.1); bs_tpr = c(0.8,0.6,0.7,0.7,0.5); bs_fpr
 #theta2 = rep(0,10)
 theta2=c(-0.1,-0.3, -0.4, -0.8, -0.45, -0.3, -0.4, -0.7, 0.4, -0.9)
 
-Data = AQE.simulate(K=5, Smax, N=5000, theta2=theta2, ss_tpr=ss_tpr, bs_tpr=bs_tpr, bs_fpr=bs_fpr, seed=rnorm(1,1000,100))
+Data = AQE.simulate(K=K, Smax=Smax, N=2000,  theta2=theta2, ss_tpr=ss_tpr, bs_tpr=bs_tpr, bs_fpr=bs_fpr, seed=rnorm(1,1000,100))
+#Data = AQE.simulate(K=K, Smax=Smax, P=NULL, Beta=matrix(logit(c(0.3,0.65,0.2, 0.6, 0.2)), nrow=1), N=2000, theta2=theta2, ss_tpr=ss_tpr, bs_tpr=bs_tpr, bs_fpr=bs_fpr, seed=rnorm(1,1000,100))
 
+
+theta2 = theta2[1:choose(K,2)]
+ss_tpr = ss_tpr[1:K]
+bs_tpr = bs_tpr[1:K]
+bs_fpr = bs_fpr[1:K]
 PAR0 = list(beta=as.vector(Data$Beta), theta2 = theta2, ss_tpr=ss_tpr, bs_tpr=bs_tpr, bs_fpr=bs_fpr)
 HYPAR = list(a=rep(1,K), b=rep(10,K), c=rep(2,K), d=rep(1,K), e=rep(1,K), f=rep(1,K), 
-             varbeta=20, vartheta=15, mutheta=-0.1, pmix=0.7)
+             varbeta=20, vartheta=2, mutheta=-0.4, pmix=0.7)
 # ----------------------------------------------------------------------------
 
 LUmat = cbind(dmat$Lmat, dmat$Umat)
@@ -55,11 +61,7 @@ mutheta=HyperPar$mutheta; pmix=HyperPar$pmix
 
 ParInit = PAR0
 THETA = c(ParInit$beta, ParInit$theta2, ParInit$ss_tpr, ParInit$bs_tpr, ParInit$bs_fpr)
-Beta_index = 1:(K*D)
-theta2_index = (1:choose(K,2)) + (K*D)
-ss_tpr_index = (1:K) + (K*D + choose(K,2))
-bs_tpr_index = (1:K) + (K*(D+1) + choose(K,2))
-bs_fpr_index = (1:K) + (K*(D+2) + choose(K,2))
+
 
 # ----------------------------- debugging Cpp functions ------------------------------------------
 # with Cpp functions, X.index must starts from 0
@@ -71,6 +73,9 @@ rates = EM_UpdateRates(K, nrow(LUmat), N.case, N.ctrl, MSS, MBS, MBS.ctrl, W, X.
 
 new_par = EM_UpdateBetaTheta2(W, X.index-1, X.unique, LUmat, K, nrow(LUmat), D,
                     varbeta, vartheta, mutheta, c(as.vector(Data$Beta), theta2))
+
+new_par = EM_UpdateBetaTheta2_exch(W, X.index-1, X.unique, LUmat, K, nrow(LUmat), D,
+                    varbeta, vartheta, mutheta, c(as.vector(Data$Beta), theta2[1]))
 
 stepaway = rnorm(25, 0, 0.05)
 old_par = c(as.vector(Data$Beta), theta2) +  stepaway
@@ -112,19 +117,78 @@ FixMap = function(x){
                      LUmat, N.case, N.ctrl, aa, bb, cc, dd, ee, ff, varbeta, vartheta, mutheta)
 }
 
-par0 = rnorm(25, -1, 0.5)
-tmp2 = turboem(par = c(ss_tpr, bs_tpr, bs_fpr, par0), 
-      fixptfn = FixMap, objfn = ObjFunc, method = "squarem", parallel = TRUE) 
-      #boundary, pconstr = NULL, project = NULL, parallel = FALSE, ...,
-      #control.method = replicate(length(method),list()), control.run = list())
-(tmp$pars - c(ss_tpr, bs_tpr, bs_fpr,  as.vector(Data$Beta), theta2))
-cbind(par0[1:15], tmp2$pars[16:30], as.vector(Data$Beta))
-cbind(tmp$pars[1:15], c(ss_tpr, bs_tpr, bs_fpr))
+FixMap_exch = function(x){
+      EM_update_exch(x, K, D, Lmat.withZero, MSS, MBS, MBS.ctrl, X.index, X.unique, 
+                        LUmat, N.case, N.ctrl, aa, bb, cc, dd, ee, ff, varbeta, vartheta, mutheta)
+}
+
+FixMap_rate0 = function(x){
+      EM_update(x, K, D, Lmat.withZero, MSS, MBS, MBS.ctrl, X.index, X.unique, 
+                     LUmat, N.case, N.ctrl, aa, bb, cc, dd, ee, ff, varbeta, vartheta, mutheta,
+                     TRUE, matrix(c(ss_tpr, bs_tpr, bs_fpr), nrow=3, byrow=TRUE))
+}
+
+FixMap_rate0_exch = function(x){
+      EM_update_exch(x, K, D, Lmat.withZero, MSS, MBS, MBS.ctrl, X.index, X.unique, 
+                     LUmat, N.case, N.ctrl, aa, bb, cc, dd, ee, ff, varbeta, vartheta, mutheta,
+                     TRUE, matrix(c(ss_tpr, bs_tpr, bs_fpr), nrow=3, byrow=TRUE))
+}
+
 
 ObjFunc = function(x){
       -Evaluate_log_distn(x,X.index-1, X.unique, LUmat, K, nrow(LUmat), D, Lmat.withZero, 
                    MSS, MBS, MBS.ctrl, varbeta, vartheta, mutheta, 
                    aa, bb, cc, dd, ee, ff)
 }
+
+ObjFunc_exch = function(x){
+      -Evaluate_log_distn_exch(x,X.index-1, X.unique, LUmat, K, nrow(LUmat), D, Lmat.withZero, 
+                   MSS, MBS, MBS.ctrl, varbeta, vartheta, mutheta, 
+                   aa, bb, cc, dd, ee, ff)
+}
+
+
+par0 = rnorm(K+choose(K,2), -1, 0.5)
+par0 = c( as.vector(Data$Beta), theta2)
+
+# _rate0: fix tpr and fpr
+# _exch: exchangeable correlation structure
+tmp = turboem(par = c(ss_tpr, bs_tpr, bs_fpr, par0), 
+      fixptfn = FixMap_rate0, method = "squarem", parallel = TRUE, control.run = list(trace=TRUE)) 
+
+tmp = turboem(par = c(ss_tpr, bs_tpr, bs_fpr, c( as.vector(Data$Beta), theta2[1])), 
+      fixptfn = FixMap_exch, objfn = ObjFunc_exch, method = "squarem", parallel = TRUE, control.run = list(trace=TRUE)) 
+
+tmp = turboem(par = c(ss_tpr, bs_tpr, bs_fpr, par0), 
+      fixptfn = FixMap_rate0, objfn = ObjFunc, method = "squarem", parallel = TRUE, control.run = list(trace=TRUE)) 
+      #boundary, pconstr = NULL, project = NULL, parallel = FALSE, ...,
+      #control.method = replicate(length(method),list()), control.run = list())
+
+beta_fit = tmp$pars[(3*K+1):((3+D)*K)]
+
+cbind(tmp$pars[(3*K+1):((3+D)*K)], as.vector(Data$Beta),tmp$pars[(3*K+1):((3+D)*K)]-as.vector(Data$Beta))
+cbind(tmp$pars[1:(3*K)], c(ss_tpr, bs_tpr, bs_fpr), tmp$pars[1:(3*K)]- c(ss_tpr, bs_tpr, bs_fpr))
+cbind(tmp$pars[-(1:((3+D)*K))], theta2, tmp$pars[-(1:((3+D)*K))]- theta2 )
+
+Data$Mu
+Mu.unique = inv.logit(X.unique%*%matrix(beta_fit, ncol=K))
+theta1.unique = t(apply(Mu.unique, 1, function(x) { MuToTheta1(Mu=x, Theta2=theta2, LUmat, dmat$MuMat, K=K, initvalue=NULL) }) )
+cellprobs.unique = t(apply(theta1.unique, 1, function(x) {c(1, exp(LUmat%*%c(x, theta2)))/(1+sum(exp(LUmat%*%c(x, theta2))))} ) )
+Data$cellprobs
+cbind(cellprobs.unique[1,],Data$cellprobs[1,], (cellprobs.unique[1,]-Data$cellprobs[1,])/Data$cellprobs[1,])
+
+l_char = apply(Data$L,1,function(x){paste(x,collapse="")})
+table(l_char)/sum(table(l_char))
+
+
 ObjFunc(tmp$par[1,])
+ObjFunc(c(tmp$par[1,1:(3*K)],  as.vector(Data$Beta), theta2))
+ObjFunc(c(ss_tpr, bs_tpr, bs_fpr, tmp$par[1,-(1:3*K)]))
 ObjFunc(c(ss_tpr, bs_tpr, bs_fpr,  as.vector(Data$Beta), theta2))
+FixMap(c(ss_tpr, bs_tpr, bs_fpr,  as.vector(Data$Beta), theta2))
+FixMap_rate0(c(ss_tpr, bs_tpr, bs_fpr,  as.vector(Data$Beta), theta2))
+
+ObjFunc_exch(tmp$par[1,])
+M.result = optim(par=c(ss_tpr, bs_tpr, bs_fpr,  as.vector(Data$Beta), theta2[1]), fn=ObjFunc_exch, method="BFGS", control=list(trace=1))
+
+
